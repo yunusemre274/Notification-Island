@@ -1,1 +1,0 @@
-This is a placeholder. Replace with an 80x80 PNG sprite of your pet in idle pose (frame 2).

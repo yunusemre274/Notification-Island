@@ -1,8 +1,12 @@
 using System;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Media;
 using NI.Services;
+using NI.Views;
+using NI.Views.Controls;
 
 namespace NI
 {
@@ -10,9 +14,13 @@ namespace NI
     {
         private DesktopVisibilityService? _visibilityService;
         private IntPtr _hwnd;
+        private ControlCenterPanel? _currentPanel;
 
         public MainWindow()
         {
+            // Use software rendering to ensure visibility in screen recordings
+            RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
+            
             InitializeComponent();
             Loaded += OnLoaded;
             Closing += OnClosing;
@@ -22,7 +30,7 @@ namespace NI
         {
             _hwnd = new WindowInteropHelper(this).Handle;
             
-            // Position at top center, 20px from top
+            // Position at top center
             PositionWindow();
             
             // Make window click-through for areas outside the island
@@ -30,12 +38,22 @@ namespace NI
             
             // Start desktop visibility monitoring
             _visibilityService = new DesktopVisibilityService(this);
+            _visibilityService.VisibilityChanged += OnVisibilityChanged;
             _visibilityService.Start();
+
+            // Wire up panel events from IslandView
+            Island.PanelRequested += OnPanelRequested;
+        }
+
+        private void OnVisibilityChanged(object? sender, bool visible)
+        {
+            // Notify ViewModel to pause/resume timers
+            Island.SetVisibility(visible);
         }
 
         private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
         {
-            // Prevent accidental closing - minimize instead
+            // Prevent accidental closing
             e.Cancel = true;
             _visibilityService?.Stop();
         }
@@ -49,10 +67,78 @@ namespace NI
 
         private void SetWindowExStyle()
         {
-            // Set as tool window (won't appear in Alt+Tab)
             var exStyle = GetWindowLong(_hwnd, GWL_EXSTYLE);
             SetWindowLong(_hwnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW);
         }
+
+        #region Panel Management
+
+        private void OnPanelRequested(object? sender, PanelType panelType)
+        {
+            if (panelType == PanelType.ControlCenter)
+            {
+                if (_currentPanel != null)
+                {
+                    ClosePanel();
+                }
+                else
+                {
+                    OpenControlCenter();
+                }
+            }
+            else if (panelType == PanelType.None)
+            {
+                ClosePanel();
+            }
+        }
+
+        private void OpenControlCenter()
+        {
+            Island.IsHitTestVisible = false;
+            ClickAwayBackdrop.Visibility = Visibility.Visible;
+
+            _currentPanel = new ControlCenterPanel();
+            _currentPanel.Opacity = 0;
+            
+            OverlayLayer.Children.Clear();
+            OverlayLayer.Children.Add(_currentPanel);
+            OverlayLayer.Visibility = Visibility.Visible;
+            OverlayLayer.IsHitTestVisible = true;
+        }
+
+        private void ClosePanel()
+        {
+            if (_currentPanel == null) return;
+
+            // Stop any Bluetooth discovery when closing
+            _currentPanel.StopAllScanning();
+
+            _currentPanel.AnimateOut(() =>
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    // Cleanup to free memory
+                    OverlayLayer.Children.Clear();
+                    OverlayLayer.Visibility = Visibility.Collapsed;
+                    OverlayLayer.IsHitTestVisible = false;
+                    ClickAwayBackdrop.Visibility = Visibility.Collapsed;
+                    
+                    // Dispose and null out panel
+                    _currentPanel?.Dispose();
+                    _currentPanel = null;
+
+                    Island.IsHitTestVisible = true;
+                });
+            });
+        }
+
+        private void OnBackdropClick(object sender, MouseButtonEventArgs e)
+        {
+            ClosePanel();
+            Island.CloseAllPanels();
+        }
+
+        #endregion
 
         public void ShowIsland()
         {
@@ -72,6 +158,11 @@ namespace NI
             {
                 if (Visibility == Visibility.Visible)
                 {
+                    // Close panel first if open
+                    if (_currentPanel != null)
+                    {
+                        ClosePanel();
+                    }
                     Island.FadeOut(() => Visibility = Visibility.Collapsed);
                 }
             });

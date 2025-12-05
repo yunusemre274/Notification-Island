@@ -10,11 +10,11 @@ none
 false
 TRACE;DEBUG;NET;NET8_0;NETCOREAPP
 
-2-2112389812
+52095040823
 
-71850254473
-200-1842403592
-MainWindow.xaml;Views\IslandView.xaml;
+19758136048
+215-1739289687
+MainWindow.xaml;Views\Controls\ControlCenterPanel.xaml;Views\Controls\SoundPanel.xaml;Views\Controls\WifiPanel.xaml;Views\IslandView.xaml;
 
 False
 

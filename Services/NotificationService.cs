@@ -1,5 +1,4 @@
 using System;
-using System.Threading.Tasks;
 using System.Windows.Media.Imaging;
 
 namespace NI.Services
@@ -13,7 +12,7 @@ namespace NI.Services
 
     /// <summary>
     /// Lightweight notification service.
-    /// Provides simulated notifications for demo.
+    /// Ready for real system notification integration.
     /// 
     /// NOTE: Real system-wide toast capture requires MSIX packaging
     /// with userNotificationListener capability.
@@ -28,36 +27,8 @@ namespace NI.Services
             if (_running) return;
             _running = true;
 
-            // Demo: simulate notifications
-            Task.Run(async () =>
-            {
-                await Task.Delay(3000);
-                if (!_running) return;
-                
-                Emit(new NotificationEventArgs
-                {
-                    AppDisplayName = "Messages",
-                    Body = "Hey! How are you doing?"
-                });
-
-                await Task.Delay(10000);
-                if (!_running) return;
-                
-                Emit(new NotificationEventArgs
-                {
-                    AppDisplayName = "Calendar",
-                    Body = "Meeting starts in 15 minutes"
-                });
-
-                await Task.Delay(15000);
-                if (!_running) return;
-                
-                Emit(new NotificationEventArgs
-                {
-                    AppDisplayName = "Mail",
-                    Body = "You have 3 new messages"
-                });
-            });
+            // Real notification listener would be hooked here
+            // Requires MSIX packaging with userNotificationListener capability
         }
 
         public void Stop()
@@ -65,9 +36,19 @@ namespace NI.Services
             _running = false;
         }
 
-        private void Emit(NotificationEventArgs e)
+        /// <summary>
+        /// Call this when a real system notification is received.
+        /// </summary>
+        public void EmitNotification(string appName, string body, BitmapImage? icon = null)
         {
-            NotificationReceived?.Invoke(this, e);
+            if (!_running) return;
+            
+            NotificationReceived?.Invoke(this, new NotificationEventArgs
+            {
+                AppDisplayName = appName,
+                Body = body,
+                Icon = icon
+            });
         }
     }
 }

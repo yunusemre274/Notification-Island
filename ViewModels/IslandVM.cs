@@ -4,19 +4,28 @@ using System.Runtime.CompilerServices;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Win32;
+using NI.Models;
 using NI.Services;
 
 namespace NI.ViewModels
 {
     /// <summary>
     /// Lightweight ViewModel for Dynamic Island.
-    /// Event-driven updates only - no continuous polling.
+    /// OPTIMIZED: Single consolidated timer for all periodic checks.
+    /// Priority: System > HeadphoneBanner > Spotify > ActiveWindow > Smart > Idle
     /// </summary>
     public class IslandVM : INotifyPropertyChanged
     {
+        #region Consolidated Timer
+
+        private DispatcherTimer? _mainTimer;
+        private int _tickCount = 0;
+        private bool _isVisible = true;
+
+        #endregion
+
         #region Clock
 
-        private DispatcherTimer? _clockTimer;
         private string _clockText = DateTime.Now.ToString("HH:mm");
         public string ClockText
         {
@@ -26,7 +35,7 @@ namespace NI.ViewModels
 
         #endregion
 
-        #region Notification State
+        #region Notification/Event State
 
         private string _appName = "";
         public string AppName
@@ -42,11 +51,18 @@ namespace NI.ViewModels
             private set { if (_notificationText != value) { _notificationText = value; OnPropertyChanged(); } }
         }
 
-        private string _compactText = "Ready";
+        private string _compactText = "Hazır";
         public string CompactText
         {
             get => _compactText;
             private set { if (_compactText != value) { _compactText = value; OnPropertyChanged(); } }
+        }
+
+        private string _eventIcon = "✨";
+        public string EventIcon
+        {
+            get => _eventIcon;
+            private set { if (_eventIcon != value) { _eventIcon = value; OnPropertyChanged(); } }
         }
 
         private BitmapImage? _appIcon;
@@ -63,30 +79,168 @@ namespace NI.ViewModels
             private set { if (_hasNotification != value) { _hasNotification = value; OnPropertyChanged(); } }
         }
 
+        private SmartEventPriority _currentPriority = SmartEventPriority.Idle;
+        public SmartEventPriority CurrentPriority => _currentPriority;
+
+        #endregion
+
+        #region Spotify State
+
+        private bool _isSpotifyPlaying = false;
+        public bool IsSpotifyPlaying
+        {
+            get => _isSpotifyPlaying;
+            private set { if (_isSpotifyPlaying != value) { _isSpotifyPlaying = value; OnPropertyChanged(); } }
+        }
+
+        private string _spotifySong = "";
+        public string SpotifySong
+        {
+            get => _spotifySong;
+            private set { if (_spotifySong != value) { _spotifySong = value; OnPropertyChanged(); } }
+        }
+
+        private string _spotifyArtist = "";
+        public string SpotifyArtist
+        {
+            get => _spotifyArtist;
+            private set { if (_spotifyArtist != value) { _spotifyArtist = value; OnPropertyChanged(); } }
+        }
+
+        private double _trackProgress = 0;
+        public double TrackProgress
+        {
+            get => _trackProgress;
+            private set { if (Math.Abs(_trackProgress - value) > 0.001) { _trackProgress = value; OnPropertyChanged(); } }
+        }
+
+        private bool _showProgress = false;
+        public bool ShowProgress
+        {
+            get => _showProgress;
+            private set { if (_showProgress != value) { _showProgress = value; OnPropertyChanged(); } }
+        }
+
+        #endregion
+
+        #region Headphone Banner State
+
+        private bool _showHeadphoneBanner = false;
+        public bool ShowHeadphoneBanner
+        {
+            get => _showHeadphoneBanner;
+            private set { if (_showHeadphoneBanner != value) { _showHeadphoneBanner = value; OnPropertyChanged(); } }
+        }
+
+        private string _headphoneDeviceName = "";
+        public string HeadphoneDeviceName
+        {
+            get => _headphoneDeviceName;
+            private set { if (_headphoneDeviceName != value) { _headphoneDeviceName = value; OnPropertyChanged(); } }
+        }
+
+        private DispatcherTimer? _headphoneBannerTimer;
+
+        #endregion
+
+        #region Active Window State
+
+        private bool _showActiveWindow = false;
+        public bool ShowActiveWindow
+        {
+            get => _showActiveWindow;
+            private set { if (_showActiveWindow != value) { _showActiveWindow = value; OnPropertyChanged(); } }
+        }
+
+        private string _activeWindowName = "";
+        public string ActiveWindowName
+        {
+            get => _activeWindowName;
+            private set { if (_activeWindowName != value) { _activeWindowName = value; OnPropertyChanged(); } }
+        }
+
+        private string _activeWindowIcon = "App";
+        public string ActiveWindowIcon
+        {
+            get => _activeWindowIcon;
+            private set { if (_activeWindowIcon != value) { _activeWindowIcon = value; OnPropertyChanged(); } }
+        }
+
         #endregion
 
         #region Settings
 
-        private bool _autostartEnabled;
+        private AppSettings _settings = new();
+
         public bool AutostartEnabled
         {
-            get => _autostartEnabled;
+            get => _settings.AutostartEnabled;
             set
             {
-                if (_autostartEnabled != value)
+                if (_settings.AutostartEnabled != value)
                 {
-                    _autostartEnabled = value;
+                    _settings.AutostartEnabled = value;
+                    _settings.Save();
                     SetAutostart(value);
                     OnPropertyChanged();
                 }
             }
         }
 
-        private bool _soundEnabled = true;
         public bool SoundEnabled
         {
-            get => _soundEnabled;
-            set { _soundEnabled = value; OnPropertyChanged(); }
+            get => _settings.SoundEnabled;
+            set
+            {
+                if (_settings.SoundEnabled != value)
+                {
+                    _settings.SoundEnabled = value;
+                    _settings.Save();
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool ShowNationalEvents
+        {
+            get => _settings.ShowNationalEvents;
+            set
+            {
+                if (_settings.ShowNationalEvents != value)
+                {
+                    _settings.ShowNationalEvents = value;
+                    _settings.Save();
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool ShowGlobalEvents
+        {
+            get => _settings.ShowGlobalEvents;
+            set
+            {
+                if (_settings.ShowGlobalEvents != value)
+                {
+                    _settings.ShowGlobalEvents = value;
+                    _settings.Save();
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool IdleMessagesEnabled
+        {
+            get => _settings.IdleMessagesEnabled;
+            set
+            {
+                if (_settings.IdleMessagesEnabled != value)
+                {
+                    _settings.IdleMessagesEnabled = value;
+                    _settings.Save();
+                    OnPropertyChanged();
+                }
+            }
         }
 
         #endregion
@@ -94,12 +248,19 @@ namespace NI.ViewModels
         #region Services
 
         private NotificationService? _notificationService;
+        private SmartEventService? _smartEventService;
+        private SpotifyService? _spotifyService;
+        private ActiveWindowService? _activeWindowService;
 
         #endregion
 
         #region Events
 
         public event EventHandler? NotificationArrived;
+        public event EventHandler? SmartEventArrived;
+        public event EventHandler? SpotifyChanged;
+        public event EventHandler? HeadphoneBannerArrived;
+        public event EventHandler? ActiveWindowChanged;
 
         #endregion
 
@@ -110,30 +271,170 @@ namespace NI.ViewModels
 
         public void Start()
         {
-            // Clock updates every 30 seconds (enough for HH:mm)
-            _clockTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
-            _clockTimer.Tick += (s, e) => ClockText = DateTime.Now.ToString("HH:mm");
-            _clockTimer.Start();
-
-            // Notification service
+            // System notification service (event-driven, no polling)
             _notificationService = new NotificationService();
-            _notificationService.NotificationReceived += OnNotification;
+            _notificationService.NotificationReceived += OnSystemNotification;
             _notificationService.Start();
+
+            // Smart event service (no internal timer - we call it)
+            _smartEventService = new SmartEventService(_settings);
+            _smartEventService.SmartEventGenerated += OnSmartEvent;
+
+            // Spotify service (no internal timer - we call it)
+            _spotifyService = new SpotifyService();
+            _spotifyService.TrackChanged += OnSpotifyTrackChanged;
+
+            // Active window service
+            _activeWindowService = new ActiveWindowService();
+            _activeWindowService.ActiveWindowChanged += OnActiveWindowChanged;
+
+            // Headphone connection detection
+            AudioService.HeadphoneConnected += OnHeadphoneConnected;
+
+            // SINGLE CONSOLIDATED TIMER - 3 second interval
+            // Handles: Clock, Spotify, Active Window, Smart Events, Audio device check
+            _mainTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+            _mainTimer.Tick += OnMainTimerTick;
+            _mainTimer.Start();
+
+            // Initial state - show active window instead of smart events
+            UpdateActiveWindow();
+        }
+
+        private void OnMainTimerTick(object? sender, EventArgs e)
+        {
+            if (!_isVisible) return;
+
+            _tickCount++;
+
+            // Clock update every 30 seconds (every 10 ticks)
+            if (_tickCount % 10 == 0)
+            {
+                ClockText = DateTime.Now.ToString("HH:mm");
+            }
+
+            // Spotify check every 3 seconds (every tick)
+            _spotifyService?.CheckSpotify();
+
+            // Update track progress when Spotify is playing
+            if (IsSpotifyPlaying && ShowProgress)
+            {
+                TrackProgress = Math.Min(1.0, TrackProgress + 0.01);
+            }
+
+            // Active window check every tick (3s) - only if not showing higher priority content
+            if (_currentPriority == SmartEventPriority.Idle || _currentPriority == SmartEventPriority.Smart)
+            {
+                UpdateActiveWindow();
+            }
+
+            // Audio device change check every 2 ticks (6s)
+            if (_tickCount % 2 == 0)
+            {
+                AudioService.CheckDeviceChange();
+            }
+
+            // Smart events check every minute (every 20 ticks)
+            if (_tickCount % 20 == 0)
+            {
+                _smartEventService?.CheckSmartEvents();
+            }
+        }
+
+        private void UpdateActiveWindow()
+        {
+            var info = _activeWindowService?.CheckActiveWindow();
+            if (info != null && !info.IsDesktop)
+            {
+                // Don't override higher priority items
+                if (_currentPriority <= SmartEventPriority.Smart && !ShowHeadphoneBanner && !IsSpotifyPlaying)
+                {
+                    ShowActiveWindow = true;
+                    ActiveWindowName = info.AppName;
+                    ActiveWindowIcon = info.IconKey;
+                    CompactText = info.AppName;
+                }
+            }
+        }
+
+        private void OnActiveWindowChanged(object? sender, ActiveWindowInfo e)
+        {
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                if (!ShowHeadphoneBanner && !IsSpotifyPlaying && _currentPriority != SmartEventPriority.System)
+                {
+                    ShowActiveWindow = true;
+                    ActiveWindowName = e.AppName;
+                    ActiveWindowIcon = e.IconKey;
+                    CompactText = e.AppName;
+                    ActiveWindowChanged?.Invoke(this, EventArgs.Empty);
+                }
+            });
+        }
+
+        private void OnHeadphoneConnected(object? sender, HeadphoneConnectedEventArgs e)
+        {
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                // Show headphone banner (high priority, below system notifications)
+                ShowHeadphoneBanner = true;
+                HeadphoneDeviceName = e.DeviceName;
+                ShowActiveWindow = false;
+                
+                HeadphoneBannerArrived?.Invoke(this, EventArgs.Empty);
+
+                // Auto-hide after 4 seconds
+                _headphoneBannerTimer?.Stop();
+                _headphoneBannerTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
+                _headphoneBannerTimer.Tick += (s, args) =>
+                {
+                    _headphoneBannerTimer.Stop();
+                    ShowHeadphoneBanner = false;
+                    HeadphoneDeviceName = "";
+                    
+                    // Return to normal content
+                    if (IsSpotifyPlaying)
+                    {
+                        SpotifyChanged?.Invoke(this, EventArgs.Empty);
+                    }
+                    else
+                    {
+                        UpdateActiveWindow();
+                    }
+                };
+                _headphoneBannerTimer.Start();
+            });
+        }
+
+        /// <summary>
+        /// Called when island visibility changes. Pauses/resumes timer.
+        /// </summary>
+        public void SetVisibility(bool visible)
+        {
+            _isVisible = visible;
         }
 
         public void Stop()
         {
-            _clockTimer?.Stop();
+            _mainTimer?.Stop();
+            _mainTimer = null;
+            _headphoneBannerTimer?.Stop();
             _notificationService?.Stop();
         }
 
-        private void OnNotification(object? sender, NotificationEventArgs e)
+        private void OnSystemNotification(object? sender, NotificationEventArgs e)
         {
             System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
-                AppName = e.AppDisplayName ?? "Notification";
+                // System notifications have highest priority
+                _currentPriority = SmartEventPriority.System;
+                ShowActiveWindow = false;
+                ShowHeadphoneBanner = false;
+                
+                AppName = e.AppDisplayName ?? "Bildirim";
                 NotificationText = e.Body ?? "";
-                CompactText = e.AppDisplayName ?? "New notification";
+                CompactText = e.AppDisplayName ?? "Yeni bildirim";
+                EventIcon = "🔔";
                 AppIcon = e.Icon;
                 HasNotification = true;
 
@@ -141,16 +442,90 @@ namespace NI.ViewModels
             });
         }
 
+        private void OnSmartEvent(object? sender, SmartEvent e)
+        {
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                // Smart events only show if not showing higher priority content
+                if (ShowHeadphoneBanner || IsSpotifyPlaying || _currentPriority == SmartEventPriority.System)
+                    return;
+
+                if (e.Priority == SmartEventPriority.Smart)
+                {
+                    ShowActiveWindow = false;
+                    ApplySmartEvent(e);
+                    SmartEventArrived?.Invoke(this, EventArgs.Empty);
+                }
+            });
+        }
+
+        private void OnSpotifyTrackChanged(object? sender, SpotifyTrack? track)
+        {
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                if (track != null && track.IsPlaying)
+                {
+                    if (_currentPriority != SmartEventPriority.System && !ShowHeadphoneBanner)
+                    {
+                        _currentPriority = SmartEventPriority.Spotify;
+                        IsSpotifyPlaying = true;
+                        ShowActiveWindow = false;
+                        SpotifySong = track.Song;
+                        SpotifyArtist = track.Artist;
+                        
+                        AppName = "Spotify";
+                        NotificationText = $"{track.Artist} - {track.Song}";
+                        var compactDisplay = $"{track.Artist} - {track.Song}";
+                        CompactText = compactDisplay.Length > 28 ? compactDisplay.Substring(0, 25) + "..." : compactDisplay;
+                        EventIcon = "🎵";
+                        HasNotification = true;
+                        
+                        TrackProgress = 0;
+                        ShowProgress = true;
+
+                        SpotifyChanged?.Invoke(this, EventArgs.Empty);
+                    }
+                }
+                else
+                {
+                    if (_currentPriority == SmartEventPriority.Spotify)
+                    {
+                        IsSpotifyPlaying = false;
+                        SpotifySong = "";
+                        SpotifyArtist = "";
+                        TrackProgress = 0;
+                        ShowProgress = false;
+                        _currentPriority = SmartEventPriority.Idle;
+                        
+                        // Return to active window
+                        UpdateActiveWindow();
+                        SpotifyChanged?.Invoke(this, EventArgs.Empty);
+                    }
+                }
+            });
+        }
+
+        private void ApplySmartEvent(SmartEvent e)
+        {
+            _currentPriority = e.Priority;
+            AppName = e.Title;
+            NotificationText = e.Message;
+            CompactText = e.Message.Length > 30 ? e.Message.Substring(0, 27) + "..." : e.Message;
+            EventIcon = e.Icon;
+            HasNotification = e.Priority != SmartEventPriority.Idle;
+        }
+
+        public void ResetToIdle()
+        {
+            _currentPriority = SmartEventPriority.Idle;
+            UpdateActiveWindow();
+        }
+
         #region Settings Persistence
 
         private void LoadSettings()
         {
-            try
-            {
-                using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run");
-                _autostartEnabled = key?.GetValue("NI") != null;
-            }
-            catch { }
+            _settings = AppSettings.Load();
         }
 
         private void SetAutostart(bool enable)
@@ -164,11 +539,11 @@ namespace NI.ViewModels
                 {
                     var exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
                     if (!string.IsNullOrEmpty(exePath))
-                        key.SetValue("NI", exePath);
+                        key.SetValue("NotificationIsland", exePath);
                 }
                 else
                 {
-                    key.DeleteValue("NI", false);
+                    key.DeleteValue("NotificationIsland", false);
                 }
             }
             catch { }
