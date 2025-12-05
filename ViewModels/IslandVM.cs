@@ -1,56 +1,72 @@
 using System;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
-using System.Windows;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
-using NI.App.Services;
 using Microsoft.Win32;
+using NI.Services;
 
-namespace NI.App.ViewModels
+namespace NI.ViewModels
 {
     /// <summary>
     /// Lightweight ViewModel for Dynamic Island.
-    /// Uses event-driven updates only - no constant polling.
+    /// Event-driven updates only - no continuous polling.
     /// </summary>
     public class IslandVM : INotifyPropertyChanged
     {
-        // Clock - updates once per minute only
+        #region Clock
+
         private DispatcherTimer? _clockTimer;
         private string _clockText = DateTime.Now.ToString("HH:mm");
         public string ClockText
         {
             get => _clockText;
-            set { if (_clockText != value) { _clockText = value; OnPropertyChanged(); } }
+            private set { if (_clockText != value) { _clockText = value; OnPropertyChanged(); } }
         }
 
-        // Notification data
+        #endregion
+
+        #region Notification State
+
         private string _appName = "";
         public string AppName
         {
             get => _appName;
-            set { if (_appName != value) { _appName = value; OnPropertyChanged(); } }
+            private set { if (_appName != value) { _appName = value; OnPropertyChanged(); } }
         }
 
         private string _notificationText = "";
         public string NotificationText
         {
             get => _notificationText;
-            set { if (_notificationText != value) { _notificationText = value; OnPropertyChanged(); } }
+            private set { if (_notificationText != value) { _notificationText = value; OnPropertyChanged(); } }
         }
 
-        private BitmapImage? _currentIcon;
-        public BitmapImage? CurrentIcon
+        private string _compactText = "Ready";
+        public string CompactText
         {
-            get => _currentIcon;
-            set { _currentIcon = value; OnPropertyChanged(); }
+            get => _compactText;
+            private set { if (_compactText != value) { _compactText = value; OnPropertyChanged(); } }
         }
 
-        // Pet
-        private PetVM _pet = new();
-        public BitmapImage? PetFrame => _pet.CurrentFrame;
+        private BitmapImage? _appIcon;
+        public BitmapImage? AppIcon
+        {
+            get => _appIcon;
+            private set { _appIcon = value; OnPropertyChanged(); }
+        }
 
-        // Settings
+        private bool _hasNotification = false;
+        public bool HasNotification
+        {
+            get => _hasNotification;
+            private set { if (_hasNotification != value) { _hasNotification = value; OnPropertyChanged(); } }
+        }
+
+        #endregion
+
+        #region Settings
+
         private bool _autostartEnabled;
         public bool AutostartEnabled
         {
@@ -73,40 +89,31 @@ namespace NI.App.ViewModels
             set { _soundEnabled = value; OnPropertyChanged(); }
         }
 
-        private bool _petEnabled = true;
-        public bool PetEnabled
-        {
-            get => _petEnabled;
-            set
-            {
-                _petEnabled = value;
-                if (!value) _pet.Stop();
-                else _pet.Start();
-                OnPropertyChanged();
-            }
-        }
+        #endregion
 
-        // Services
+        #region Services
+
         private NotificationService? _notificationService;
 
-        // Events
+        #endregion
+
+        #region Events
+
         public event EventHandler? NotificationArrived;
+
+        #endregion
 
         public IslandVM()
         {
-            _pet.FrameChanged += (s, e) => OnPropertyChanged(nameof(PetFrame));
             LoadSettings();
         }
 
         public void Start()
         {
-            // Clock timer - updates every 30 seconds (enough for HH:mm display)
+            // Clock updates every 30 seconds (enough for HH:mm)
             _clockTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
             _clockTimer.Tick += (s, e) => ClockText = DateTime.Now.ToString("HH:mm");
             _clockTimer.Start();
-
-            // Pet idle animation
-            _pet.Start();
 
             // Notification service
             _notificationService = new NotificationService();
@@ -117,23 +124,24 @@ namespace NI.App.ViewModels
         public void Stop()
         {
             _clockTimer?.Stop();
-            _pet.Stop();
             _notificationService?.Stop();
         }
 
         private void OnNotification(object? sender, NotificationEventArgs e)
         {
-            Application.Current.Dispatcher.Invoke(() =>
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
                 AppName = e.AppDisplayName ?? "Notification";
                 NotificationText = e.Body ?? "";
-                CurrentIcon = e.Icon;
+                CompactText = e.AppDisplayName ?? "New notification";
+                AppIcon = e.Icon;
+                HasNotification = true;
+
                 NotificationArrived?.Invoke(this, EventArgs.Empty);
             });
         }
 
-        public void PetWave() => _pet.TriggerWave();
-        public void PetJump() => _pet.TriggerJump();
+        #region Settings Persistence
 
         private void LoadSettings()
         {
@@ -166,8 +174,14 @@ namespace NI.App.ViewModels
             catch { }
         }
 
+        #endregion
+
+        #region INotifyPropertyChanged
+
         public event PropertyChangedEventHandler? PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string? name = null)
             => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+        #endregion
     }
 }

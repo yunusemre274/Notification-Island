@@ -1,74 +1,28 @@
-# NI – Dynamic Island Style Notification Bar
+# NI – Dynamic Island for Windows
 
-Ultra-lightweight Windows overlay mimicking Apple's Dynamic Island.
+Persistent, hover-expanding notification overlay inspired by Apple's Dynamic Island.
 
 ---
 
 ## Features
 
-- **Thin Floating Bar** – 700×42px compact, expands on notification
-- **Dynamic Island Behavior** – Compact ↔ Expanded smooth transitions
+- **Persistent Overlay** – Always visible on desktop, never auto-closes
+- **Hover Expansion** – Compact → Expanded on mouse hover
 - **Desktop-Only** – Auto-hides when apps overlap, shows on desktop
-- **Pet Widget** – Tiny animated pet, responds to clicks
-- **Ultra-Low Resource** – Target: <0.3% CPU idle, <40MB RAM
+- **Smooth Animations** – GPU-accelerated scale/width transitions
+- **Ultra-Low Resource** – Event-driven, no heavy polling
 
 ---
 
-## Prerequisites
+## UI Modes
 
-### Install .NET 8 SDK
+### Compact (Idle)
+- Width: 350px, Height: 36px
+- Shows: Clock, status dot, "Ready" text
 
-Download: https://dotnet.microsoft.com/download/dotnet/8.0
-
-Verify:
-```powershell
-dotnet --version
-```
-
----
-
-## Project Structure
-
-```
-/App
-  /Views
-    DynamicIslandView.xaml/.cs    # Main island UI
-  /ViewModels
-    IslandVM.cs                   # Lightweight island state
-    PetVM.cs                      # Pet animation logic
-  /Services
-    NotificationService.cs        # Notification handling
-    DesktopVisibilityService.cs   # Win32 visibility detection
-    AppIconResolver.cs            # Icon loading
-  MainWindow.xaml/.cs             # Host window
-  Program.cs                      # Entry point
-/Assets
-  /Pet                            # Pet sprites (28x28 PNG)
-  /Icons                          # UI icons
-```
-
----
-
-## Build & Run
-
-```powershell
-cd "c:\Users\yunus\Desktop\Projects\NI"
-dotnet build
-dotnet run
-```
-
----
-
-## Assets Required
-
-| Path | Size | Description |
-|------|------|-------------|
-| `Assets/Pet/idle_1.png` | 28x28 | Pet idle frame 1 |
-| `Assets/Pet/idle_2.png` | 28x28 | Pet idle frame 2 |
-| `Assets/Pet/wave_1.png` | 28x28 | Pet wave frame 1 |
-| `Assets/Pet/wave_2.png` | 28x28 | Pet wave frame 2 |
-| `Assets/Pet/jump_1.png` | 28x28 | Pet jump frame 1 |
-| `Assets/Pet/jump_2.png` | 28x28 | Pet jump frame 2 |
+### Expanded (Hover/Notification)
+- Width: 680px, Height: 50px
+- Shows: Clock, app icon, notification title/text, status icons
 
 ---
 
@@ -76,70 +30,64 @@ dotnet run
 
 | Action | Result |
 |--------|--------|
-| Click | Island pulses, pet waves |
-| Double-click | Pet jumps |
+| Hover | Smooth expansion |
+| Mouse Leave | Returns to compact |
+| Click | Pulse animation |
 | Right-click | Settings popup |
+| Notification | Expand → show → auto-compact |
 
 ---
 
-## Desktop Visibility
+## Build & Run
 
-The island auto-hides when:
-- A maximized window is active
-- Any window overlaps the island area
+### Requirements
+- Windows 10/11
+- .NET 8 SDK: https://dotnet.microsoft.com/download/dotnet/8.0
 
-Shows again when:
-- User returns to desktop (Win+D)
-- Foreground window moves away
-
----
-
-## Performance Optimizations
-
-- Clock updates every 30s (not every second)
-- Pet animation at 2.5 FPS idle
-- Visibility check every 500ms
-- Frozen brushes used throughout
-- Animations stop when hidden
-- Event-driven updates only
-
----
-
-## Autostart
-
-Toggle via right-click Settings, or manually:
-
+### Build
 ```powershell
-# Enable
-$exe = (Get-Process -Id $PID).Path
-Set-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "NI" -Value $exe
-
-# Disable
-Remove-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "NI"
+cd "c:\Users\yunus\Desktop\Projects\NI"
+dotnet build
 ```
+
+### Run
+```powershell
+dotnet run
+```
+
+---
+
+## Project Structure
+
+```
+/NI
+  /Views
+    IslandView.xaml/.cs         # Main island UI with hover logic
+  /ViewModels  
+    IslandVM.cs                 # Lightweight state management
+  /Services
+    NotificationService.cs      # Notification handling
+    DesktopVisibilityService.cs # Win32 desktop detection
+  MainWindow.xaml/.cs           # Host window
+  Program.cs                    # Entry point
+```
+
+---
+
+## Performance
+
+- Clock updates: Every 30 seconds
+- Visibility check: Every 500ms
+- Animations: GPU-accelerated transforms
+- No continuous loops when idle
 
 ---
 
 ## Build Release
 
-### Self-Contained EXE
-
 ```powershell
 dotnet publish -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true
 ```
-
-Output: `bin\Release\net8.0-windows10.0.19041.0\win-x64\publish\NI.exe`
-
----
-
-## System Notifications (Requires MSIX)
-
-Full system notification capture requires:
-1. MSIX packaging
-2. `<uap3:Capability Name="userNotificationListener"/>` in manifest
-3. `UserNotificationListener.RequestAccessAsync()`
-
-Current version uses simulated notifications for demo.
 
 ---
 

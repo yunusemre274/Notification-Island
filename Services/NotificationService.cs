@@ -2,7 +2,7 @@ using System;
 using System.Threading.Tasks;
 using System.Windows.Media.Imaging;
 
-namespace NI.App.Services
+namespace NI.Services
 {
     public class NotificationEventArgs : EventArgs
     {
@@ -28,25 +28,34 @@ namespace NI.App.Services
             if (_running) return;
             _running = true;
 
-            // Demo notifications
+            // Demo: simulate notifications
             Task.Run(async () =>
             {
-                await Task.Delay(2500);
+                await Task.Delay(3000);
                 if (!_running) return;
                 
                 Emit(new NotificationEventArgs
                 {
                     AppDisplayName = "Messages",
-                    Body = "A New Message!"
+                    Body = "Hey! How are you doing?"
                 });
 
-                await Task.Delay(8000);
+                await Task.Delay(10000);
                 if (!_running) return;
                 
                 Emit(new NotificationEventArgs
                 {
                     AppDisplayName = "Calendar",
-                    Body = "Meeting in 15 minutes"
+                    Body = "Meeting starts in 15 minutes"
+                });
+
+                await Task.Delay(15000);
+                if (!_running) return;
+                
+                Emit(new NotificationEventArgs
+                {
+                    AppDisplayName = "Mail",
+                    Body = "You have 3 new messages"
                 });
             });
         }

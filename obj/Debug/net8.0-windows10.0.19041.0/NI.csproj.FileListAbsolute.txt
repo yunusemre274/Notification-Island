@@ -1,5 +1,3 @@
-C:\Users\yunus\Desktop\Projects\NI\bin\Debug\net8.0-windows10.0.19041.0\Assets\Icons\sound.png.txt
-C:\Users\yunus\Desktop\Projects\NI\bin\Debug\net8.0-windows10.0.19041.0\Assets\Icons\wifi.png.txt
 C:\Users\yunus\Desktop\Projects\NI\bin\Debug\net8.0-windows10.0.19041.0\Assets\PetSprites\idle_1.png.txt
 C:\Users\yunus\Desktop\Projects\NI\bin\Debug\net8.0-windows10.0.19041.0\Assets\PetSprites\idle_2.png.txt
 C:\Users\yunus\Desktop\Projects\NI\bin\Debug\net8.0-windows10.0.19041.0\NI.exe
@@ -9,11 +7,9 @@ C:\Users\yunus\Desktop\Projects\NI\bin\Debug\net8.0-windows10.0.19041.0\NI.dll
 C:\Users\yunus\Desktop\Projects\NI\bin\Debug\net8.0-windows10.0.19041.0\NI.pdb
 C:\Users\yunus\Desktop\Projects\NI\bin\Debug\net8.0-windows10.0.19041.0\Microsoft.Windows.SDK.NET.dll
 C:\Users\yunus\Desktop\Projects\NI\bin\Debug\net8.0-windows10.0.19041.0\WinRT.Runtime.dll
-C:\Users\yunus\Desktop\Projects\NI\obj\Debug\net8.0-windows10.0.19041.0\App\MainWindow.g.cs
 C:\Users\yunus\Desktop\Projects\NI\obj\Debug\net8.0-windows10.0.19041.0\GeneratedInternalTypeHelper.g.cs
 C:\Users\yunus\Desktop\Projects\NI\obj\Debug\net8.0-windows10.0.19041.0\NI_MarkupCompile.cache
 C:\Users\yunus\Desktop\Projects\NI\obj\Debug\net8.0-windows10.0.19041.0\NI_MarkupCompile.lref
-C:\Users\yunus\Desktop\Projects\NI\obj\Debug\net8.0-windows10.0.19041.0\App\MainWindow.baml
 C:\Users\yunus\Desktop\Projects\NI\obj\Debug\net8.0-windows10.0.19041.0\NI.g.resources
 C:\Users\yunus\Desktop\Projects\NI\obj\Debug\net8.0-windows10.0.19041.0\NI.GeneratedMSBuildEditorConfig.editorconfig
 C:\Users\yunus\Desktop\Projects\NI\obj\Debug\net8.0-windows10.0.19041.0\NI.AssemblyInfoInputs.cache
@@ -26,6 +22,10 @@ C:\Users\yunus\Desktop\Projects\NI\obj\Debug\net8.0-windows10.0.19041.0\NI.pdb
 C:\Users\yunus\Desktop\Projects\NI\obj\Debug\net8.0-windows10.0.19041.0\NI.genruntimeconfig.cache
 C:\Users\yunus\Desktop\Projects\NI\obj\Debug\net8.0-windows10.0.19041.0\ref\NI.dll
 C:\Users\yunus\Desktop\Projects\NI\bin\Debug\net8.0-windows10.0.19041.0\Assets\Pet\README.txt
-C:\Users\yunus\Desktop\Projects\NI\obj\Debug\net8.0-windows10.0.19041.0\App\Views\DynamicIslandView.g.cs
-C:\Users\yunus\Desktop\Projects\NI\obj\Debug\net8.0-windows10.0.19041.0\App\Views\DynamicIslandView.baml
 C:\Users\yunus\Desktop\Projects\NI\obj\Debug\net8.0-windows10.0.19041.0\NI.sourcelink.json
+C:\Users\yunus\Desktop\Projects\NI\obj\Debug\net8.0-windows10.0.19041.0\MainWindow.g.cs
+C:\Users\yunus\Desktop\Projects\NI\obj\Debug\net8.0-windows10.0.19041.0\Views\IslandView.g.cs
+C:\Users\yunus\Desktop\Projects\NI\obj\Debug\net8.0-windows10.0.19041.0\MainWindow.baml
+C:\Users\yunus\Desktop\Projects\NI\obj\Debug\net8.0-windows10.0.19041.0\Views\IslandView.baml
+C:\Users\yunus\Desktop\Projects\NI\bin\Debug\net8.0-windows10.0.19041.0\Assets\Icons\Ekran görüntüsü 2025-12-05 162205.png
+C:\Users\yunus\Desktop\Projects\NI\bin\Debug\net8.0-windows10.0.19041.0\Assets\Icons\Ekran görüntüsü 2025-12-05 162207.png
