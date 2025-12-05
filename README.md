@@ -1,16 +1,16 @@
-# NI – Floating Notification Center + Pet Widget
+# NI – Dynamic Island Style Notification Bar
 
-A simple WPF .NET 8 app that shows a floating notification bar with optional animated pet.
+Ultra-lightweight Windows overlay mimicking Apple's Dynamic Island.
 
 ---
 
 ## Features
 
-- **Floating Notification Bar** – 900×70px, rounded corners, translucent black background.
-- **Clock & Status Dot** – live clock on left, green status dot.
-- **Notification Queue** – incoming notifications queue up and auto-hide after 3 seconds.
-- **Pet Widget** – simple sprite animation, responds to click/feed/jump (extendable).
-- **Topmost Overlay** – stays on top, does not steal focus.
+- **Thin Floating Bar** – 700×42px compact, expands on notification
+- **Dynamic Island Behavior** – Compact ↔ Expanded smooth transitions
+- **Desktop-Only** – Auto-hides when apps overlap, shows on desktop
+- **Pet Widget** – Tiny animated pet, responds to clicks
+- **Ultra-Low Resource** – Target: <0.3% CPU idle, <40MB RAM
 
 ---
 
@@ -18,13 +18,11 @@ A simple WPF .NET 8 app that shows a floating notification bar with optional ani
 
 ### Install .NET 8 SDK
 
-Download and install from: https://dotnet.microsoft.com/download/dotnet/8.0
+Download: https://dotnet.microsoft.com/download/dotnet/8.0
 
-After installation, verify:
-
+Verify:
 ```powershell
 dotnet --version
-# Should show 8.x.x
 ```
 
 ---
@@ -34,124 +32,117 @@ dotnet --version
 ```
 /App
   /Views
-    NotificationView.xaml / .cs
-    PetView.xaml / .cs
+    DynamicIslandView.xaml/.cs    # Main island UI
   /ViewModels
-    NotificationViewModel.cs
-    PetViewModel.cs
+    IslandVM.cs                   # Lightweight island state
+    PetVM.cs                      # Pet animation logic
   /Services
-    NotificationListener.cs
-    AppIconResolver.cs
-    PetStateMachine.cs
-  Program.cs
+    NotificationService.cs        # Notification handling
+    DesktopVisibilityService.cs   # Win32 visibility detection
+    AppIconResolver.cs            # Icon loading
+  MainWindow.xaml/.cs             # Host window
+  Program.cs                      # Entry point
 /Assets
-  /Icons
-    sound.png
-    wifi.png
-  /PetSprites
-    idle_1.png .. idle_4.png
-MainWindow.xaml / .cs
-NI.csproj
-README.md
+  /Pet                            # Pet sprites (28x28 PNG)
+  /Icons                          # UI icons
 ```
 
 ---
 
 ## Build & Run
 
-### Requirements
-
-- Windows 10/11 (version 1903+)
-- .NET 8 SDK
-- Visual Studio 2022 (optional) or VS Code + C# Dev Kit
-
-### Build
-
 ```powershell
+cd "c:\Users\yunus\Desktop\Projects\NI"
 dotnet build
-```
-
-### Run
-
-```powershell
 dotnet run
 ```
 
-The window will appear at the top-center of your primary monitor.
+---
+
+## Assets Required
+
+| Path | Size | Description |
+|------|------|-------------|
+| `Assets/Pet/idle_1.png` | 28x28 | Pet idle frame 1 |
+| `Assets/Pet/idle_2.png` | 28x28 | Pet idle frame 2 |
+| `Assets/Pet/wave_1.png` | 28x28 | Pet wave frame 1 |
+| `Assets/Pet/wave_2.png` | 28x28 | Pet wave frame 2 |
+| `Assets/Pet/jump_1.png` | 28x28 | Pet jump frame 1 |
+| `Assets/Pet/jump_2.png` | 28x28 | Pet jump frame 2 |
 
 ---
 
-## Assets (Required)
+## Interactions
 
-Place your own PNG files in the `Assets` folder (or download free icons):
-
-| Path                        | Description              |
-|-----------------------------|--------------------------|
-| `Assets/Icons/sound.png`    | Speaker/volume icon      |
-| `Assets/Icons/wifi.png`     | WiFi icon                |
-| `Assets/PetSprites/idle_1.png` – `idle_4.png` | Pet animation frames |
-
-Without these files the app will run but show blank images.
+| Action | Result |
+|--------|--------|
+| Click | Island pulses, pet waves |
+| Double-click | Pet jumps |
+| Right-click | Settings popup |
 
 ---
 
-## Autostart on Boot
+## Desktop Visibility
 
-Toggle in code or add manually:
+The island auto-hides when:
+- A maximized window is active
+- Any window overlaps the island area
+
+Shows again when:
+- User returns to desktop (Win+D)
+- Foreground window moves away
+
+---
+
+## Performance Optimizations
+
+- Clock updates every 30s (not every second)
+- Pet animation at 2.5 FPS idle
+- Visibility check every 500ms
+- Frozen brushes used throughout
+- Animations stop when hidden
+- Event-driven updates only
+
+---
+
+## Autostart
+
+Toggle via right-click Settings, or manually:
 
 ```powershell
 # Enable
-Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "NI" -Value "$(Resolve-Path .\bin\Release\net8.0-windows\NI.exe)"
+$exe = (Get-Process -Id $PID).Path
+Set-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "NI" -Value $exe
 
 # Disable
-Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "NI"
+Remove-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "NI"
 ```
 
 ---
 
-## System Notification Listening – Limitations
+## Build Release
 
-**Important:** Capturing *all* Windows toast notifications from any app requires:
-
-1. The app to be **packaged (MSIX)** and declare the `userNotificationListener` capability.
-2. Or use a system-level hook which requires elevated permissions and is fragile.
-
-This sample provides a **simulated notification** for demo purposes. To enable real listening:
-
-1. Package the app via MSIX.
-2. Add `<uap3:Capability Name="userNotificationListener" />` to Package.appxmanifest.
-3. Request `Windows.UI.Notifications.Management.UserNotificationListener.RequestAccessAsync()`.
-
----
-
-## Creating an Installer
-
-### Option 1 – Self-Contained EXE
+### Self-Contained EXE
 
 ```powershell
 dotnet publish -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true
 ```
 
-Output: `bin\Release\net8.0-windows\win-x64\publish\NI.exe`
-
-### Option 2 – MSIX Package (for store or sideload)
-
-Use Visual Studio → Add → Windows Application Packaging Project, then publish.
+Output: `bin\Release\net8.0-windows10.0.19041.0\win-x64\publish\NI.exe`
 
 ---
 
-## Optional Features (Toggle in Code)
+## System Notifications (Requires MSIX)
 
-| Feature           | Location                 |
-|-------------------|--------------------------|
-| Dark/Light Mode   | Change Border Background |
-| Blur Effect       | Set `BlurEffectResource` |
-| Pet Size          | Adjust Width/Height      |
-| Disable Pet       | Remove PetView from Grid |
-| Notification Sound| Add `SoundPlayer.Play()` |
+Full system notification capture requires:
+1. MSIX packaging
+2. `<uap3:Capability Name="userNotificationListener"/>` in manifest
+3. `UserNotificationListener.RequestAccessAsync()`
+
+Current version uses simulated notifications for demo.
 
 ---
 
 ## License
 
-MIT – do whatever you want.
+MIT

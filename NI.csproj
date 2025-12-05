@@ -8,9 +8,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <StartupObject>NI.App.Program</StartupObject>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <!-- Optimize for size and performance -->
-    <PublishTrimmed>true</PublishTrimmed>
-    <TrimMode>partial</TrimMode>
   </PropertyGroup>
 
   <ItemGroup>

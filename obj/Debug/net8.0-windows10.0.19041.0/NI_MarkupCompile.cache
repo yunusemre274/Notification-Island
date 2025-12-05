@@ -10,11 +10,11 @@ none
 false
 TRACE;DEBUG;NET;NET8_0;NETCOREAPP
 
-3804481971
+2204586371
 
-10-1775721761
+9-1234456697
 200-1842403592
-App\MainWindow.xaml;App\Views\NotificationView.xaml;App\Views\PetView.xaml;
+App\MainWindow.xaml;App\Views\DynamicIslandView.xaml;
 
 False
 

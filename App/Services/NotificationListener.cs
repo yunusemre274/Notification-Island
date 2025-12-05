@@ -12,48 +12,51 @@ namespace NI.App.Services
     }
 
     /// <summary>
-    /// Simple notification listener.
+    /// Lightweight notification service.
+    /// Provides simulated notifications for demo.
     /// 
-    /// NOTE: Capturing ALL Windows toast notifications from ANY app requires:
-    /// 1. The app to be packaged (MSIX) with userNotificationListener capability.
-    /// 2. Or use low-level Windows hooks which require admin and are fragile.
-    /// 
-    /// This implementation provides simulated notifications for demo purposes.
-    /// See README.md for instructions on enabling real system notification listening.
+    /// NOTE: Real system-wide toast capture requires MSIX packaging
+    /// with userNotificationListener capability.
     /// </summary>
-    public class NotificationListener
+    public class NotificationService
     {
         public event EventHandler<NotificationEventArgs>? NotificationReceived;
+        private bool _running = false;
 
         public void Start()
         {
-            // Simulate demo notifications
+            if (_running) return;
+            _running = true;
+
+            // Demo notifications
             Task.Run(async () =>
             {
-                await Task.Delay(2000);
-                OnNotification(new NotificationEventArgs
+                await Task.Delay(2500);
+                if (!_running) return;
+                
+                Emit(new NotificationEventArgs
                 {
                     AppDisplayName = "Messages",
                     Body = "A New Message!"
                 });
 
-                await Task.Delay(5000);
-                OnNotification(new NotificationEventArgs
+                await Task.Delay(8000);
+                if (!_running) return;
+                
+                Emit(new NotificationEventArgs
                 {
                     AppDisplayName = "Calendar",
                     Body = "Meeting in 15 minutes"
                 });
-
-                await Task.Delay(5000);
-                OnNotification(new NotificationEventArgs
-                {
-                    AppDisplayName = "Mail",
-                    Body = "You have 3 new emails"
-                });
             });
         }
 
-        protected void OnNotification(NotificationEventArgs e)
+        public void Stop()
+        {
+            _running = false;
+        }
+
+        private void Emit(NotificationEventArgs e)
         {
             NotificationReceived?.Invoke(this, e);
         }
