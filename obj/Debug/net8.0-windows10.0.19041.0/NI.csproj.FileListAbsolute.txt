@@ -40,3 +40,6 @@ C:\Users\yunus\Desktop\Projects\NI\bin\Debug\net8.0-windows10.0.19041.0\NAudio.M
 C:\Users\yunus\Desktop\Projects\NI\bin\Debug\net8.0-windows10.0.19041.0\NAudio.Wasapi.dll
 C:\Users\yunus\Desktop\Projects\NI\bin\Debug\net8.0-windows10.0.19041.0\NAudio.WinForms.dll
 C:\Users\yunus\Desktop\Projects\NI\bin\Debug\net8.0-windows10.0.19041.0\NAudio.WinMM.dll
+C:\Users\yunus\Desktop\Projects\NI\bin\Debug\net8.0-windows10.0.19041.0\System.CodeDom.dll
+C:\Users\yunus\Desktop\Projects\NI\bin\Debug\net8.0-windows10.0.19041.0\System.Management.dll
+C:\Users\yunus\Desktop\Projects\NI\bin\Debug\net8.0-windows10.0.19041.0\runtimes\win\lib\net8.0\System.Management.dll

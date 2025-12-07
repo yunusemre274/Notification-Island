@@ -356,16 +356,108 @@ namespace NI.Services
         }
 
         /// <summary>
-        /// Toggles Wi-Fi on/off.
+        /// Toggles Wi-Fi on/off using REAL Windows Radio API.
+        /// This controls the actual Wi-Fi hardware radio.
         /// </summary>
         public static void ToggleWifi()
         {
-            IsEnabled = !IsEnabled;
-            if (!IsEnabled)
+            ToggleWifiAsync().ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Toggles Wi-Fi on/off asynchronously using Windows Radio API.
+        /// </summary>
+        public static async System.Threading.Tasks.Task ToggleWifiAsync()
+        {
+            try
             {
-                Disconnect();
+                // Use RadioService for REAL hardware control
+                bool success = await RadioService.ToggleWifiAsync();
+                
+                if (success)
+                {
+                    IsEnabled = RadioService.IsWifiOn;
+                    
+                    if (!IsEnabled)
+                    {
+                        Disconnect();
+                        ConnectedNetwork = null;
+                    }
+                    else
+                    {
+                        // Re-initialize and scan for networks
+                        UpdateCurrentConnection();
+                    }
+                    
+                    StateChanged?.Invoke(null, EventArgs.Empty);
+                }
             }
-            StateChanged?.Invoke(null, EventArgs.Empty);
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"ToggleWifiAsync error: {ex.Message}");
+                // Fallback to software toggle
+                IsEnabled = !IsEnabled;
+                if (!IsEnabled) Disconnect();
+                StateChanged?.Invoke(null, EventArgs.Empty);
+            }
+        }
+
+        /// <summary>
+        /// Sets Wi-Fi radio state explicitly.
+        /// </summary>
+        public static async System.Threading.Tasks.Task SetWifiStateAsync(bool enabled)
+        {
+            try
+            {
+                bool success = await RadioService.SetWifiStateAsync(enabled);
+                
+                if (success)
+                {
+                    IsEnabled = enabled;
+                    
+                    if (!enabled)
+                    {
+                        Disconnect();
+                        ConnectedNetwork = null;
+                    }
+                    else
+                    {
+                        UpdateCurrentConnection();
+                    }
+                    
+                    StateChanged?.Invoke(null, EventArgs.Empty);
+                }
+            }
+            catch
+            {
+                IsEnabled = enabled;
+                if (!enabled) Disconnect();
+                StateChanged?.Invoke(null, EventArgs.Empty);
+            }
+        }
+
+        /// <summary>
+        /// Refreshes the Wi-Fi state from hardware.
+        /// </summary>
+        public static async System.Threading.Tasks.Task RefreshStateAsync()
+        {
+            try
+            {
+                await RadioService.RefreshStatesAsync();
+                IsEnabled = RadioService.IsWifiOn;
+                
+                if (IsEnabled)
+                {
+                    UpdateCurrentConnection();
+                }
+                else
+                {
+                    ConnectedNetwork = null;
+                }
+                
+                StateChanged?.Invoke(null, EventArgs.Empty);
+            }
+            catch { }
         }
 
         private static string EscapeXml(string text)

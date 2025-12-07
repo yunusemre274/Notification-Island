@@ -265,16 +265,86 @@ namespace NI.Services
         }
 
         /// <summary>
-        /// Toggles Bluetooth enabled state.
+        /// Toggles Bluetooth enabled state using REAL Windows Radio API.
+        /// This controls the actual Bluetooth hardware radio.
         /// </summary>
         public void Toggle()
         {
-            IsEnabled = !IsEnabled;
-            if (!IsEnabled)
+            ToggleAsync().ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Toggles Bluetooth asynchronously using Windows Radio API.
+        /// </summary>
+        public async Task ToggleAsync()
+        {
+            try
             {
-                StopDiscovery();
+                bool success = await RadioService.ToggleBluetoothAsync();
+                
+                if (success)
+                {
+                    IsEnabled = RadioService.IsBluetoothOn;
+                    
+                    if (!IsEnabled)
+                    {
+                        StopDiscovery();
+                    }
+                    
+                    StateChanged?.Invoke(this, EventArgs.Empty);
+                }
             }
-            StateChanged?.Invoke(this, EventArgs.Empty);
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"ToggleAsync error: {ex.Message}");
+                // Fallback to software toggle
+                IsEnabled = !IsEnabled;
+                if (!IsEnabled) StopDiscovery();
+                StateChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+
+        /// <summary>
+        /// Sets Bluetooth radio state explicitly.
+        /// </summary>
+        public async Task SetStateAsync(bool enabled)
+        {
+            try
+            {
+                bool success = await RadioService.SetBluetoothStateAsync(enabled);
+                
+                if (success)
+                {
+                    IsEnabled = enabled;
+                    
+                    if (!enabled)
+                    {
+                        StopDiscovery();
+                    }
+                    
+                    StateChanged?.Invoke(this, EventArgs.Empty);
+                }
+            }
+            catch
+            {
+                IsEnabled = enabled;
+                if (!enabled) StopDiscovery();
+                StateChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+
+        /// <summary>
+        /// Refreshes the Bluetooth state from hardware.
+        /// </summary>
+        public async Task RefreshStateAsync()
+        {
+            try
+            {
+                await RadioService.RefreshStatesAsync();
+                IsEnabled = RadioService.IsBluetoothOn;
+                StateChanged?.Invoke(this, EventArgs.Empty);
+            }
+            catch { }
         }
 
         private void Watcher_Added(DeviceWatcher sender, DeviceInformation deviceInfo)

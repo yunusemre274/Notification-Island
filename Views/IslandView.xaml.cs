@@ -26,9 +26,9 @@ namespace NI.Views
         // Event for MainWindow to handle Control Center
         public event EventHandler<PanelType>? PanelRequested;
 
-        // Animation durations - short and efficient
-        private static readonly Duration ExpandDuration = TimeSpan.FromMilliseconds(200);
-        private static readonly Duration CompactDuration = TimeSpan.FromMilliseconds(150);
+        // Animation durations - FASTER for snappy HyperOS feel
+        private static readonly Duration ExpandDuration = TimeSpan.FromMilliseconds(130);
+        private static readonly Duration CompactDuration = TimeSpan.FromMilliseconds(110);
 
         // Sizes
         private const double CompactWidth = 350;
@@ -67,10 +67,10 @@ namespace NI.Views
         private void OnMouseLeave(object sender, MouseEventArgs e)
         {
             _isHovering = false;
-            // Delay compact to prevent flicker
+            // Reduced delay for snappier response
             var timer = new System.Windows.Threading.DispatcherTimer
             {
-                Interval = TimeSpan.FromMilliseconds(150)
+                Interval = TimeSpan.FromMilliseconds(100)
             };
             timer.Tick += (s, args) =>
             {
@@ -357,7 +357,7 @@ namespace NI.Views
 
         #endregion
 
-        #region Animations - Short and Non-Looping
+        #region Animations - FAST HyperOS Style
 
         private void Expand()
         {
@@ -374,10 +374,11 @@ namespace NI.Views
 
             IslandBorder.CornerRadius = new CornerRadius(25);
 
-            var fadeOutCompact = new DoubleAnimation(0, TimeSpan.FromMilliseconds(80));
-            var fadeInExpanded = new DoubleAnimation(1, TimeSpan.FromMilliseconds(120)) 
+            // Faster content transitions
+            var fadeOutCompact = new DoubleAnimation(0, TimeSpan.FromMilliseconds(50));
+            var fadeInExpanded = new DoubleAnimation(1, TimeSpan.FromMilliseconds(80)) 
             { 
-                BeginTime = TimeSpan.FromMilliseconds(80) 
+                BeginTime = TimeSpan.FromMilliseconds(40) 
             };
 
             CompactContent.BeginAnimation(OpacityProperty, fadeOutCompact);
@@ -400,10 +401,11 @@ namespace NI.Views
 
             IslandBorder.CornerRadius = new CornerRadius(18);
 
-            var fadeOutExpanded = new DoubleAnimation(0, TimeSpan.FromMilliseconds(80));
-            var fadeInCompact = new DoubleAnimation(1, TimeSpan.FromMilliseconds(100)) 
+            // Faster content transitions
+            var fadeOutExpanded = new DoubleAnimation(0, TimeSpan.FromMilliseconds(50));
+            var fadeInCompact = new DoubleAnimation(1, TimeSpan.FromMilliseconds(70)) 
             { 
-                BeginTime = TimeSpan.FromMilliseconds(50) 
+                BeginTime = TimeSpan.FromMilliseconds(30) 
             };
 
             ExpandedContent.BeginAnimation(OpacityProperty, fadeOutExpanded);
@@ -413,10 +415,10 @@ namespace NI.Views
 
         private void PlayPulse()
         {
-            var scaleUp = new DoubleAnimation(1.03, TimeSpan.FromMilliseconds(60));
-            var scaleDown = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(60)) 
+            var scaleUp = new DoubleAnimation(1.03, TimeSpan.FromMilliseconds(50));
+            var scaleDown = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(50)) 
             { 
-                BeginTime = TimeSpan.FromMilliseconds(60) 
+                BeginTime = TimeSpan.FromMilliseconds(50) 
             };
 
             var sb = new Storyboard();
