@@ -17,10 +17,10 @@ namespace NI.ViewModels
     /// </summary>
     public class IslandVM : INotifyPropertyChanged
     {
-        #region Consolidated Timer
+        #region Phase 0: Timers Removed
 
-        private DispatcherTimer? _mainTimer;
-        private int _tickCount = 0;
+        // PHASE 0 CLEANUP: All timers removed except Spotify progress timer (in MediaSessionService)
+        // Updates now driven by events only
         private bool _isVisible = true;
 
         #endregion
@@ -180,7 +180,7 @@ namespace NI.ViewModels
             private set { if (_headphoneDeviceName != value) { _headphoneDeviceName = value; OnPropertyChanged(); } }
         }
 
-        private DispatcherTimer? _headphoneBannerTimer;
+        // PHASE 0: _headphoneBannerTimer removed - manual dismiss only
 
         #endregion
 
@@ -335,48 +335,13 @@ namespace NI.ViewModels
             // Headphone connection detection
             AudioService.HeadphoneConnected += OnHeadphoneConnected;
 
-            // SINGLE CONSOLIDATED TIMER - 3 second interval
-            // Handles: Clock, Spotify, Active Window, Smart Events, Audio device check
-            _mainTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
-            _mainTimer.Tick += OnMainTimerTick;
-            _mainTimer.Start();
+            // PHASE 0: Main timer removed - updates driven by service events
 
             // Initial state - show active window instead of smart events
             UpdateActiveWindow();
         }
 
-        private void OnMainTimerTick(object? sender, EventArgs e)
-        {
-            if (!_isVisible) return;
-
-            _tickCount++;
-
-            // Clock update every 30 seconds (every 10 ticks)
-            if (_tickCount % 10 == 0)
-            {
-                ClockText = DateTime.Now.ToString("HH:mm");
-            }
-
-            // Spotify is handled by events, no timer updates needed
-
-            // Active window check every tick (3s) - only if not showing higher priority content
-            if (_currentPriority == SmartEventPriority.Idle || _currentPriority == SmartEventPriority.Smart)
-            {
-                UpdateActiveWindow();
-            }
-
-            // Audio device change check every 2 ticks (6s)
-            if (_tickCount % 2 == 0)
-            {
-                AudioService.CheckDeviceChange();
-            }
-
-            // Smart events check every minute (every 20 ticks)
-            if (_tickCount % 20 == 0)
-            {
-                _smartEventService?.CheckSmartEvents();
-            }
-        }
+        // PHASE 0: OnMainTimerTick removed - all updates are now event-driven
 
         private void UpdateActiveWindow()
         {
@@ -422,25 +387,7 @@ namespace NI.ViewModels
                 HeadphoneBannerArrived?.Invoke(this, EventArgs.Empty);
 
                 // Auto-hide after 4 seconds (this timer is acceptable - single instance, cleaned up)
-                _headphoneBannerTimer?.Stop();
-                _headphoneBannerTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
-                _headphoneBannerTimer.Tick += (s, args) =>
-                {
-                    _headphoneBannerTimer.Stop();
-                    ShowHeadphoneBanner = false;
-                    HeadphoneDeviceName = "";
-
-                    // SIMPLIFIED: Return to normal content using single source of truth
-                    if (IsSpotifyActive)
-                    {
-                        SpotifyChanged?.Invoke(this, EventArgs.Empty);
-                    }
-                    else
-                    {
-                        UpdateActiveWindow();
-                    }
-                };
-                _headphoneBannerTimer.Start();
+                // PHASE 0: Auto-hide timer removed - headphone banner stays until manually dismissed or overridden by higher priority event
             });
         }
 
@@ -454,15 +401,24 @@ namespace NI.ViewModels
 
         public void Stop()
         {
-            _mainTimer?.Stop();
-            _mainTimer = null;
-            _headphoneBannerTimer?.Stop();
-            _headphoneBannerTimer = null;
+            // PHASE 0: Timers removed, only cleanup services
+
+            // Stop all services
             _notificationService?.Stop();
+            _notificationService = null;
 
             // CRITICAL: Dispose media session service to clean up event subscriptions
             _mediaSessionService?.Dispose();
             _mediaSessionService = null;
+
+            // Unsubscribe from static events to prevent memory leaks
+            AudioService.HeadphoneConnected -= OnHeadphoneConnected;
+
+            // Stop active window service
+            _activeWindowService = null;
+
+            // Clear smart event service
+            _smartEventService = null;
         }
 
         private void OnSystemNotification(object? sender, NotificationEventArgs e)
@@ -585,6 +541,45 @@ namespace NI.ViewModels
 
         #endregion
 
+        #region Phase 4: Ollama Integration
+
+        private NI.Services.AI.OllamaClient? _ollamaClient;
+
+        /// <summary>
+        /// PHASE 4: Get answer from local Ollama
+        /// </summary>
+        public async Task<string> GetOllamaAnswerAsync(string question)
+        {
+            try
+            {
+                // Initialize Ollama client if needed
+                if (_ollamaClient == null)
+                {
+                    _ollamaClient = new NI.Services.AI.OllamaClient();
+
+                    // Check if Ollama is available
+                    var isAvailable = await _ollamaClient.IsAvailableAsync();
+                    if (!isAvailable)
+                    {
+                        return "❌ Ollama is not running.\n\nPlease start Ollama on your computer:\n1. Install Ollama from ollama.ai\n2. Run 'ollama serve' in terminal\n3. Try your search again";
+                    }
+                }
+
+                // Get answer from Ollama
+                var answer = await _ollamaClient.GenerateAsync(question);
+
+                return string.IsNullOrWhiteSpace(answer)
+                    ? "Sorry, I couldn't generate an answer. Please try again."
+                    : answer;
+            }
+            catch (Exception ex)
+            {
+                return $"❌ Error: {ex.Message}\n\nMake sure Ollama is running (ollama serve)";
+            }
+        }
+
+        #endregion
+
         private void ApplySmartEvent(SmartEvent e)
         {
             _currentPriority = e.Priority;
@@ -599,6 +594,17 @@ namespace NI.ViewModels
         {
             _currentPriority = SmartEventPriority.Idle;
             UpdateActiveWindow();
+        }
+
+        /// <summary>
+        /// PHASE 2: Clear notification after auto-dismiss
+        /// </summary>
+        public void ClearNotification()
+        {
+            HasNotification = false;
+            CompactText = "";
+            AppIcon = null;
+            EventIcon = "";
         }
 
         #region Settings Persistence

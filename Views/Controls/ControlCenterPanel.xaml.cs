@@ -44,8 +44,7 @@ namespace NI.Views.Controls
         private bool _deviceDropdownOpen = false;
         private string _currentDevice = "";
 
-        // State polling timer (1.5 second interval)
-        private DispatcherTimer? _stateTimer;
+        // PHASE 0: State polling timer REMOVED - use events only
         private int _lastBrightness = -1;
 
         // Services
@@ -106,10 +105,7 @@ namespace NI.Views.Controls
             RadioService.WifiStateChanged += OnWifiHardwareStateChanged;
             RadioService.BluetoothStateChanged += OnBluetoothHardwareStateChanged;
 
-            // Start state polling timer (1.5 second interval)
-            _stateTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1500) };
-            _stateTimer.Tick += OnStatePollTick;
-            _stateTimer.Start();
+            // PHASE 0: State polling timer REMOVED - rely on events and manual checks only
         }
 
         private async void InitializeRadioServiceAsync()
@@ -157,80 +153,8 @@ namespace NI.Views.Controls
             });
         }
 
-        private void OnStatePollTick(object? sender, EventArgs e)
-        {
-            // Poll hardware states to keep UI in sync
-            PollHardwareStates();
-        }
-
-        private async void PollHardwareStates()
-        {
-            try
-            {
-                // Check Wi-Fi hardware state
-                var (wifiOn, btOn) = await RadioService.GetRadioStatesAsync();
-                
-                Dispatcher.Invoke(() =>
-                {
-                    // Update Wi-Fi if changed
-                    if (_wifiEnabled != wifiOn)
-                    {
-                        _wifiEnabled = wifiOn;
-                        UpdateAllToggleUI();
-                        if (_wifiEnabled) LoadWifiNetworks();
-                    }
-                    
-                    // Update Bluetooth if changed
-                    if (_bluetoothEnabled != btOn)
-                    {
-                        _bluetoothEnabled = btOn;
-                        UpdateAllToggleUI();
-                        if (_bluetoothEnabled) LoadBluetoothDevices();
-                    }
-                });
-
-                // Check brightness (for FN key changes)
-                int currentBrightness = BrightnessService.GetBrightness();
-                if (_lastBrightness != currentBrightness && _lastBrightness != -1)
-                {
-                    Dispatcher.Invoke(() =>
-                    {
-                        // Only update if user isn't dragging the slider
-                        if (!BrightnessSlider.IsMouseCaptured)
-                        {
-                            BrightnessSlider.Value = currentBrightness;
-                            BrightnessText.Text = $"{currentBrightness}%";
-                        }
-                    });
-                }
-                _lastBrightness = currentBrightness;
-
-                // Check volume (for hardware key changes)
-                Dispatcher.Invoke(() =>
-                {
-                    if (!VolumeSlider.IsMouseCaptured)
-                    {
-                        int currentVolume = AudioService.Volume;
-                        if ((int)VolumeSlider.Value != currentVolume)
-                        {
-                            VolumeSlider.Value = currentVolume;
-                            VolumeText.Text = $"{currentVolume}%";
-                        }
-                        
-                        bool isMuted = AudioService.IsMuted;
-                        if (_isMuted != isMuted)
-                        {
-                            _isMuted = isMuted;
-                            UpdateMuteButton();
-                        }
-                    }
-                });
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"State poll error: {ex.Message}");
-            }
-        }
+        // PHASE 0: OnStatePollTick and PollHardwareStates REMOVED
+        // Hardware state changes now handled by events only
 
         private void OnPanelLoaded(object sender, RoutedEventArgs e)
         {
@@ -894,7 +818,7 @@ namespace NI.Views.Controls
 
         public void StopAllScanning()
         {
-            _stateTimer?.Stop();
+            // PHASE 0: _stateTimer removed
             _bluetoothService?.StopDiscovery();
         }
 
@@ -912,12 +836,7 @@ namespace NI.Views.Controls
             {
                 StopAllScanning();
 
-                // Stop state polling
-                if (_stateTimer != null)
-                {
-                    _stateTimer.Stop();
-                    _stateTimer = null;
-                }
+                // PHASE 0: State polling timer removed
 
                 // Unsubscribe from radio state changes
                 RadioService.WifiStateChanged -= OnWifiHardwareStateChanged;

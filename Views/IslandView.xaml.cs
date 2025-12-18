@@ -17,80 +17,61 @@ namespace NI.Views
     public enum PanelType { None, Wifi, Sound, ControlCenter }
 
     /// <summary>
-    /// Music Island State - Controls hover and click expansion
+    /// KISS Architecture: Single Island Mode (ONLY ONE ACTIVE AT A TIME)
+    /// Priority: ControlPanel > Notification > SpotifyExpanded > SpotifyPill > Idle
     /// </summary>
-    public enum MusicIslandState
+    public enum IslandMode
     {
-        Compact,         // Minimal pill
-        HoverExpanded,   // Wider with album art and basic controls
-        FullExpanded     // Full card with timeline and all controls
-    }
-
-    /// <summary>
-    /// SINGLE SOURCE OF TRUTH for Island UI state
-    /// </summary>
-    public enum IslandState
-    {
-        Default,        // Compact pill - Active Window, idle, etc.
-        MusicExpanded   // Square card - Spotify playback
+        Idle,              // Default: Time + Search/ActiveWindow + Status
+        ControlPanel,      // Control panel expanded (highest priority when open)
+        Notification,      // System notification (app logo + "1 new notification")
+        SpotifyPill,       // Spotify compact: Logo + Track info
+        SpotifyExpanded,   // Spotify full: Album art + Controls + Timeline
+        SearchAnswer       // Ollama answer card (large black card with response)
     }
 
     public partial class IslandView : UserControl, INotifyPropertyChanged
     {
         private IslandVM _vm = null!;
 
-        // SINGLE STATE PROPERTY - controls ALL visibility
-        private IslandState _currentState = IslandState.Default;
-        public IslandState CurrentState
+        // KISS: SINGLE MODE PROPERTY - Only one state active at any time
+        private IslandMode _currentMode = IslandMode.Idle;
+        public IslandMode CurrentMode
         {
-            get => _currentState;
+            get => _currentMode;
             private set
             {
-                if (_currentState != value)
+                if (_currentMode != value)
                 {
-                    _currentState = value;
-                    OnPropertyChanged(nameof(CurrentState));
-                    OnPropertyChanged(nameof(IsDefault));
-                    OnPropertyChanged(nameof(IsMusicExpanded));
+                    var oldMode = _currentMode;
+                    _currentMode = value;
 
-                    // Animate size when state changes
-                    AnimateToCurrentState();
+                    // PHASE 0: Log state transitions for debugging
+                    System.Diagnostics.Debug.WriteLine($"[PHASE0] Mode Transition: {oldMode} → {_currentMode}");
+
+                    OnPropertyChanged(nameof(CurrentMode));
+
+                    // Update all mode-specific properties for XAML binding
+                    OnPropertyChanged(nameof(IsIdle));
+                    OnPropertyChanged(nameof(IsControlPanel));
+                    OnPropertyChanged(nameof(IsNotification));
+                    OnPropertyChanged(nameof(IsSpotifyPill));
+                    OnPropertyChanged(nameof(IsSpotifyExpanded));
+                    OnPropertyChanged(nameof(IsSearchAnswer));
+
+                    // Animate size when mode changes
+                    AnimateToCurrentMode();
                 }
             }
         }
 
-        // Helper properties for XAML binding
-        public bool IsDefault => CurrentState == IslandState.Default;
-        public bool IsMusicExpanded => CurrentState == IslandState.MusicExpanded;
-
-        // Music island state (for hover/click expansion)
-        private MusicIslandState _musicState = MusicIslandState.Compact;
-        public MusicIslandState MusicState
-        {
-            get => _musicState;
-            private set
-            {
-                if (_musicState != value)
-                {
-                    _musicState = value;
-                    OnPropertyChanged(nameof(MusicState));
-                    OnPropertyChanged(nameof(IsCompact));
-                    OnPropertyChanged(nameof(IsHoverExpanded));
-                    OnPropertyChanged(nameof(IsFullExpanded));
-
-                    // Animate size when music state changes
-                    if (CurrentState == IslandState.MusicExpanded)
-                    {
-                        AnimateToCurrentState();
-                    }
-                }
-            }
-        }
-
-        // Helper properties for music state
-        public bool IsCompact => MusicState == MusicIslandState.Compact;
-        public bool IsHoverExpanded => MusicState == MusicIslandState.HoverExpanded;
-        public bool IsFullExpanded => MusicState == MusicIslandState.FullExpanded;
+        // XAML Binding Properties - Each returns true for ONLY ONE mode
+        public bool IsIdle => CurrentMode == IslandMode.Idle;
+        public bool IsControlPanel => CurrentMode == IslandMode.ControlPanel;
+        public bool IsNotification => CurrentMode == IslandMode.Notification;
+        public bool IsSpotifyPill => CurrentMode == IslandMode.SpotifyPill;
+        public bool IsSpotifyExpanded => CurrentMode == IslandMode.SpotifyExpanded;
+        public bool IsSearchAnswer => CurrentMode == IslandMode.SearchAnswer;
 
         // Panel state
         private PanelType _currentPanel = PanelType.None;
@@ -134,28 +115,95 @@ namespace NI.Views
 
             _vm.Start();
 
+            // Cleanup event subscriptions when unloaded
+            Unloaded += OnUnloaded;
+
             // REMOVED: MediaSessionService initialization (now ONLY in IslandVM)
             // REMOVED: SystemMonitor and AI initialization (non-essential features)
         }
 
         /// <summary>
-        /// SINGLE PLACE for state transition logic
+        /// Clean up event subscriptions to prevent memory leaks
+        /// </summary>
+        private void OnUnloaded(object sender, RoutedEventArgs e)
+        {
+            // PHASE 0: Timer cleanup removed
+
+            if (_vm != null)
+            {
+                _vm.NotificationArrived -= OnNotificationArrived;
+                _vm.SmartEventArrived -= OnSmartEventArrived;
+                _vm.SpotifyChanged -= OnSpotifyChanged;
+                _vm.HeadphoneBannerArrived -= OnHeadphoneBannerArrived;
+                _vm.ActiveWindowChanged -= OnActiveWindowChanged;
+                _vm.PropertyChanged -= OnViewModelPropertyChanged;
+            }
+            Unloaded -= OnUnloaded;
+        }
+
+        /// <summary>
+        /// KISS: SINGLE DECISION FUNCTION - Determines mode based on priority
+        /// Priority: ControlPanel > SearchAnswer > Notification > SpotifyExpanded > SpotifyPill > Idle
+        /// Called whenever VM state changes
+        /// </summary>
+        private void UpdateMode()
+        {
+            // Priority 1: Control Panel (user opened it)
+            if (_currentPanel != PanelType.None)
+            {
+                CurrentMode = IslandMode.ControlPanel;
+                return;
+            }
+
+            // Priority 2: Search Answer (user is viewing Ollama response)
+            // Note: SearchAnswer is set directly in OnSearchKeyDown, not through UpdateMode
+            // This check ensures we don't override it unless we explicitly call CloseSearchAnswer
+            if (CurrentMode == IslandMode.SearchAnswer)
+            {
+                return; // Stay in SearchAnswer mode until explicitly closed
+            }
+
+            // Priority 3: Notification (system notification active)
+            if (_vm.HasNotification)
+            {
+                CurrentMode = IslandMode.Notification;
+                return;
+            }
+
+            // Priority 4 & 5: Spotify (expanded if clicked, pill if playing)
+            if (_vm.IsSpotifyActive)
+            {
+                // User clicked to expand
+                if (_isSpotifyExpanded)
+                {
+                    CurrentMode = IslandMode.SpotifyExpanded;
+                    return;
+                }
+
+                // Default: show pill when playing
+                CurrentMode = IslandMode.SpotifyPill;
+                return;
+            }
+
+            // Default: Idle (Time + Search + Weather)
+            CurrentMode = IslandMode.Idle;
+        }
+
+        // Track if user expanded Spotify manually
+        private bool _isSpotifyExpanded = false;
+
+        // PHASE 0: Notification auto-dismiss timer REMOVED - manual dismiss only
+
+        /// <summary>
+        /// Called when ViewModel properties change
         /// </summary>
         private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
-            if (e.PropertyName == nameof(_vm.IsSpotifyActive))
+            // VM state changed, recalculate mode
+            if (e.PropertyName == nameof(_vm.IsSpotifyActive) ||
+                e.PropertyName == nameof(_vm.HasNotification))
             {
-                // AUTOMATIC STATE TRANSITION (ONLY PLACE)
-                if (_vm.IsSpotifyActive)
-                {
-                    CurrentState = IslandState.MusicExpanded;
-                    MusicState = MusicIslandState.Compact; // Start compact
-                }
-                else
-                {
-                    CurrentState = IslandState.Default;
-                    MusicState = MusicIslandState.Compact; // Reset
-                }
+                UpdateMode();
             }
         }
 
@@ -176,20 +224,13 @@ namespace NI.Views
 
         private void OnMouseEnter(object sender, MouseEventArgs e)
         {
-            // Hover expand when Spotify is active and not fully expanded
-            if (CurrentState == IslandState.MusicExpanded && MusicState == MusicIslandState.Compact)
-            {
-                MusicState = MusicIslandState.HoverExpanded;
-            }
+            // KISS: No hover animations in Phase 0
+            // Hover effects will be added in later phases if needed
         }
 
         private void OnMouseLeave(object sender, MouseEventArgs e)
         {
-            // Collapse to compact when leaving (unless fully expanded)
-            if (CurrentState == IslandState.MusicExpanded && MusicState == MusicIslandState.HoverExpanded)
-            {
-                MusicState = MusicIslandState.Compact;
-            }
+            // KISS: No hover animations in Phase 0
         }
 
         #endregion
@@ -198,20 +239,14 @@ namespace NI.Views
 
         private void OnLeftClick(object sender, MouseButtonEventArgs e)
         {
-            // Toggle full expansion when Spotify is active
-            if (CurrentState == IslandState.MusicExpanded)
+            // KISS: Toggle Spotify expansion when Spotify is active
+            if (CurrentMode == IslandMode.SpotifyPill || CurrentMode == IslandMode.SpotifyExpanded)
             {
-                if (MusicState == MusicIslandState.FullExpanded)
-                {
-                    MusicState = MusicIslandState.Compact;
-                }
-                else
-                {
-                    MusicState = MusicIslandState.FullExpanded;
-                }
+                _isSpotifyExpanded = !_isSpotifyExpanded;
+                UpdateMode();
                 e.Handled = true;
             }
-            else
+            else if (CurrentMode == IslandMode.Idle)
             {
                 PlayPulse();
             }
@@ -227,6 +262,61 @@ namespace NI.Views
             SettingsPopup.IsOpen = false;
             _vm.Stop();
             Application.Current.Shutdown();
+        }
+
+        /// <summary>
+        /// PHASE 4: Handle search input (Enter key)
+        /// </summary>
+        private async void OnSearchKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter && !string.IsNullOrWhiteSpace(SearchTextBox.Text))
+            {
+                e.Handled = true;
+
+                var question = SearchTextBox.Text.Trim();
+                SearchTextBox.Clear();
+
+                // Show SearchAnswer mode with "Thinking..." message
+                SearchQuestionText.Text = question;
+                SearchAnswerText.Text = "Thinking...";
+                CurrentMode = IslandMode.SearchAnswer;
+
+                // Call Ollama to get answer
+                var answer = await _vm.GetOllamaAnswerAsync(question);
+
+                // Display answer
+                SearchAnswerText.Text = answer;
+            }
+            else if (e.Key == Key.Escape)
+            {
+                // ESC closes search answer if open, otherwise clears search box
+                if (CurrentMode == IslandMode.SearchAnswer)
+                {
+                    CloseSearchAnswer();
+                }
+                else
+                {
+                    SearchTextBox.Clear();
+                }
+                e.Handled = true;
+            }
+        }
+
+        /// <summary>
+        /// PHASE 4: Close search answer and return to Idle
+        /// </summary>
+        private void OnCloseSearchAnswer(object sender, MouseButtonEventArgs e)
+        {
+            e.Handled = true;
+            CloseSearchAnswer();
+        }
+
+        private void CloseSearchAnswer()
+        {
+            SearchTextBox.Clear();
+            SearchQuestionText.Text = "";
+            SearchAnswerText.Text = "";
+            UpdateMode(); // Will return to Idle or other active mode
         }
 
         private void OnCenterClick(object sender, MouseButtonEventArgs e)
@@ -280,22 +370,29 @@ namespace NI.Views
             if (panelType == PanelType.ControlCenter)
             {
                 PanelRequested?.Invoke(this, panelType);
+                UpdateMode(); // Recalculate mode when control panel opens
                 return;
             }
 
             if (_currentPanel == panelType)
             {
                 CloseCurrentPanel();
+                UpdateMode(); // Recalculate mode when panel closes
                 return;
             }
 
             if (_currentPanel != PanelType.None)
             {
-                CloseCurrentPanel(() => OpenPanel(panelType));
+                CloseCurrentPanel(() =>
+                {
+                    OpenPanel(panelType);
+                    UpdateMode(); // Recalculate mode after panel switch
+                });
             }
             else
             {
                 OpenPanel(panelType);
+                UpdateMode(); // Recalculate mode when panel opens
             }
         }
 
@@ -309,14 +406,12 @@ namespace NI.Views
             {
                 case PanelType.Wifi:
                     _wifiPanel = new WifiPanel();
-                    _wifiPanel.Opacity = 0;
                     PanelContainer.Children.Add(_wifiPanel);
                     _wifiPanel.AnimateIn();
                     break;
 
                 case PanelType.Sound:
                     _soundPanel = new SoundPanel();
-                    _soundPanel.Opacity = 0;
                     PanelContainer.Children.Add(_soundPanel);
                     _soundPanel.AnimateIn();
                     break;
@@ -361,6 +456,7 @@ namespace NI.Views
             if (_currentPanel != PanelType.None)
             {
                 CloseCurrentPanel();
+                UpdateMode(); // Recalculate mode when all panels close
             }
         }
 
@@ -368,106 +464,107 @@ namespace NI.Views
 
         #region Notification Handling
 
+        /// <summary>
+        /// PHASE 0: Handle notification arrival - NO auto-dismiss (manual only)
+        /// </summary>
         private void OnNotificationArrived(object? sender, EventArgs e)
         {
-            // REMOVED: State managed automatically by IsSpotifyActive
+            // Notification arrived - recalculate mode (will show notification)
+            UpdateMode();
+
+            // PHASE 0: Auto-dismiss timer REMOVED - notification stays until manually dismissed or overridden
         }
 
         private void OnSmartEventArrived(object? sender, EventArgs e)
         {
-            // REMOVED: State managed automatically by IsSpotifyActive
+            // Smart event arrived - recalculate mode
+            UpdateMode();
         }
 
         private void OnSpotifyChanged(object? sender, EventArgs e)
         {
-            // REMOVED: State managed automatically by IsSpotifyActive via PropertyChanged
+            // Spotify state changed - recalculate mode
+            UpdateMode();
         }
 
         private void OnHeadphoneBannerArrived(object? sender, EventArgs e)
         {
-            // REMOVED: State managed automatically by IsSpotifyActive
+            // Headphone banner - recalculate mode
+            UpdateMode();
         }
 
         private void OnActiveWindowChanged(object? sender, EventArgs e)
         {
-            Dispatcher.Invoke(() =>
-            {
-                UpdateActiveWindowIcon();
-                // REMOVED: UpdateExpandedContentVisibility - state is automatic
-            });
-        }
-
-        private void UpdateActiveWindowIcon()
-        {
-            var iconKey = _vm.ActiveWindowIcon + "Icon";
-            if (Resources.Contains(iconKey))
-            {
-                var icon = Resources[iconKey] as ImageSource;
-                if (ActiveWindowIconCompact != null)
-                    ActiveWindowIconCompact.Source = icon;
-                // REMOVED: ActiveWindowIconExpanded - no longer exists in XAML
-            }
-            else
-            {
-                // Fallback to AppIcon
-                var icon = Resources["AppIcon"] as ImageSource;
-                if (ActiveWindowIconCompact != null)
-                    ActiveWindowIconCompact.Source = icon;
-                // REMOVED: ActiveWindowIconExpanded - no longer exists in XAML
-            }
+            // PHASE 1: Idle pill no longer shows ActiveWindow
+            // ActiveWindow info removed from Idle UI (Time + Search + Weather only)
         }
 
         // REMOVED: UpdateExpandedContentVisibility - replaced by automatic state transitions
 
         #endregion
 
-        #region Animations - Simple State Transitions
+        #region Animations - Simple Mode Transitions
 
         /// <summary>
-        /// Animates to the current state size (called automatically when CurrentState changes)
+        /// KISS: Animates to current mode size (called automatically when CurrentMode changes)
+        /// Each mode has fixed dimensions - no complex state combinations
         /// </summary>
-        private void AnimateToCurrentState()
+        private void AnimateToCurrentMode()
         {
-            double targetWidth, targetHeight, targetCornerRadius, targetScale;
+            double targetWidth, targetHeight, targetCornerRadius;
 
-            if (CurrentState == IslandState.MusicExpanded)
+            switch (CurrentMode)
             {
-                // Music state determines the size
-                switch (MusicState)
-                {
-                    case MusicIslandState.FullExpanded:
-                        targetWidth = 380;
-                        targetHeight = 110;
-                        targetCornerRadius = 24;
-                        targetScale = 1.01;
-                        break;
+                case IslandMode.Idle:
+                    // Default pill: Time + Search + Status
+                    targetWidth = 350;
+                    targetHeight = 36;
+                    targetCornerRadius = 18;
+                    break;
 
-                    case MusicIslandState.HoverExpanded:
-                        targetWidth = 350;
-                        targetHeight = 86;
-                        targetCornerRadius = 22;
-                        targetScale = 1.005;
-                        break;
+                case IslandMode.ControlPanel:
+                    // Control panel stays as pill, panel appears below
+                    targetWidth = 350;
+                    targetHeight = 36;
+                    targetCornerRadius = 18;
+                    break;
 
-                    case MusicIslandState.Compact:
-                    default:
-                        targetWidth = 300;
-                        targetHeight = 74;
-                        targetCornerRadius = 20;
-                        targetScale = 1.0;
-                        break;
-                }
+                case IslandMode.Notification:
+                    // Notification pill: App logo + text
+                    targetWidth = 320;
+                    targetHeight = 36;
+                    targetCornerRadius = 18;
+                    break;
+
+                case IslandMode.SpotifyPill:
+                    // Spotify compact: Logo + Track info
+                    targetWidth = 300;
+                    targetHeight = 74;
+                    targetCornerRadius = 20;
+                    break;
+
+                case IslandMode.SpotifyExpanded:
+                    // Spotify full card: Album + Controls + Timeline
+                    targetWidth = 380;
+                    targetHeight = 110;
+                    targetCornerRadius = 24;
+                    break;
+
+                case IslandMode.SearchAnswer:
+                    // Ollama answer card (large black card)
+                    targetWidth = 450;
+                    targetHeight = 200;
+                    targetCornerRadius = 26;
+                    break;
+
+                default:
+                    targetWidth = DefaultWidth;
+                    targetHeight = DefaultHeight;
+                    targetCornerRadius = 18;
+                    break;
             }
-            else
-            {
-                // Default state
-                targetWidth = DefaultWidth;
-                targetHeight = DefaultHeight;
-                targetCornerRadius = 18;
-                targetScale = 1.0;
-            }
 
-            // Smooth cubic easing for organic feel
+            // Smooth cubic easing
             var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
 
             // Animate size
@@ -477,15 +574,13 @@ namespace NI.Views
             var heightAnim = new DoubleAnimation(targetHeight, TransitionDuration) { EasingFunction = ease };
             IslandBorder.BeginAnimation(HeightProperty, heightAnim);
 
-            // Subtle scale for premium feel
-            var scaleXAnim = new DoubleAnimation(targetScale, TransitionDuration) { EasingFunction = ease };
-            var scaleYAnim = new DoubleAnimation(targetScale, TransitionDuration) { EasingFunction = ease };
-            IslandScale.BeginAnimation(ScaleTransform.ScaleXProperty, scaleXAnim);
-            IslandScale.BeginAnimation(ScaleTransform.ScaleYProperty, scaleYAnim);
+            // No scale transform in KISS - just size changes
+            IslandScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+            IslandScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+            IslandScale.ScaleX = 1.0;
+            IslandScale.ScaleY = 1.0;
 
-            // Smooth corner radius transition
-            var cornerAnim = new DoubleAnimation(targetCornerRadius, TransitionDuration) { EasingFunction = ease };
-            IslandBorder.BeginAnimation(Border.CornerRadiusProperty, null);
+            // Corner radius
             IslandBorder.CornerRadius = new CornerRadius(targetCornerRadius);
         }
 

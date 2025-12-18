@@ -105,8 +105,7 @@ namespace NI
             ClickAwayBackdrop.Visibility = Visibility.Visible;
 
             _currentPanel = new ControlCenterPanel();
-            _currentPanel.Opacity = 0;
-            
+
             OverlayLayer.Children.Clear();
             OverlayLayer.Children.Add(_currentPanel);
             OverlayLayer.Visibility = Visibility.Visible;
