@@ -13,6 +13,16 @@ namespace NI.Models
         public bool AutostartEnabled { get; set; } = false;
         public bool SoundEnabled { get; set; } = true;
 
+        // NEW: Feature flags
+        public bool EnableMediaControls { get; set; } = true;
+        public bool EnableSystemMonitor { get; set; } = true;
+        public bool EnableAiAssistant { get; set; } = true;
+
+        // NEW: AI settings
+        public string OllamaBaseUrl { get; set; } = "http://localhost:11434";
+        public string OllamaModel { get; set; } = "llama2";
+
+
         private static readonly string SettingsFolder = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "NotificationIsland");

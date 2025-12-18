@@ -14,12 +14,12 @@
         WindowStartupLocation="Manual">
 
     <Grid x:Name="RootGrid">
-        <!-- Island Bar (Z-Index 5000) -->
-        <views:IslandView x:Name="Island" 
-                          HorizontalAlignment="Center" 
+        <!-- Island Bar (SINGLE SOURCE OF TRUTH) -->
+        <views:IslandView x:Name="Island"
+                          HorizontalAlignment="Center"
                           VerticalAlignment="Top"
                           Panel.ZIndex="5000"/>
-        
+
         <!-- Overlay Layer for Panels (Z-Index 9999) -->
         <Grid x:Name="OverlayLayer"
               VerticalAlignment="Top"

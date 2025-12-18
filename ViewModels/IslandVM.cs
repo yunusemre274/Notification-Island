@@ -6,6 +6,7 @@ using System.Windows.Threading;
 using Microsoft.Win32;
 using NI.Models;
 using NI.Services;
+using Windows.Media.Control;
 
 namespace NI.ViewModels
 {
@@ -84,13 +85,37 @@ namespace NI.ViewModels
 
         #endregion
 
-        #region Spotify State
+        #region Spotify State (SINGLE SOURCE OF TRUTH)
+
+        // CRITICAL: IsSpotifyActive = true → ONLY Spotify UI visible
+        //          IsSpotifyActive = false → ONLY Active Window UI visible
+        private bool _isSpotifyActive = false;
+        public bool IsSpotifyActive
+        {
+            get => _isSpotifyActive;
+            private set
+            {
+                if (_isSpotifyActive != value)
+                {
+                    _isSpotifyActive = value;
+                    OnPropertyChanged();
+                    System.Diagnostics.Debug.WriteLine($"[IslandVM] IsSpotifyActive = {value}");
+                }
+            }
+        }
 
         private bool _isSpotifyPlaying = false;
         public bool IsSpotifyPlaying
         {
             get => _isSpotifyPlaying;
-            private set { if (_isSpotifyPlaying != value) { _isSpotifyPlaying = value; OnPropertyChanged(); } }
+            private set
+            {
+                if (_isSpotifyPlaying != value)
+                {
+                    _isSpotifyPlaying = value;
+                    OnPropertyChanged();
+                }
+            }
         }
 
         private string _spotifySong = "";
@@ -107,18 +132,34 @@ namespace NI.ViewModels
             private set { if (_spotifyArtist != value) { _spotifyArtist = value; OnPropertyChanged(); } }
         }
 
-        private double _trackProgress = 0;
-        public double TrackProgress
+        private BitmapImage? _albumArtwork;
+        public BitmapImage? AlbumArtwork
         {
-            get => _trackProgress;
-            private set { if (Math.Abs(_trackProgress - value) > 0.001) { _trackProgress = value; OnPropertyChanged(); } }
+            get => _albumArtwork;
+            private set { if (_albumArtwork != value) { _albumArtwork = value; OnPropertyChanged(); } }
         }
 
-        private bool _showProgress = false;
-        public bool ShowProgress
+        private TimeSpan _currentPosition;
+        public TimeSpan CurrentPosition
         {
-            get => _showProgress;
-            private set { if (_showProgress != value) { _showProgress = value; OnPropertyChanged(); } }
+            get => _currentPosition;
+            private set { if (_currentPosition != value) { _currentPosition = value; OnPropertyChanged(); OnPropertyChanged(nameof(PositionText)); OnPropertyChanged(nameof(ProgressPercentage)); } }
+        }
+
+        private TimeSpan _totalDuration;
+        public TimeSpan TotalDuration
+        {
+            get => _totalDuration;
+            private set { if (_totalDuration != value) { _totalDuration = value; OnPropertyChanged(); OnPropertyChanged(nameof(DurationText)); OnPropertyChanged(nameof(ProgressPercentage)); } }
+        }
+
+        public string PositionText => FormatTime(CurrentPosition);
+        public string DurationText => FormatTime(TotalDuration);
+        public double ProgressPercentage => TotalDuration.TotalSeconds > 0 ? (CurrentPosition.TotalSeconds / TotalDuration.TotalSeconds) * 100 : 0;
+
+        private string FormatTime(TimeSpan time)
+        {
+            return $"{(int)time.TotalMinutes}:{time.Seconds:D2}";
         }
 
         #endregion
@@ -249,7 +290,7 @@ namespace NI.ViewModels
 
         private NotificationService? _notificationService;
         private SmartEventService? _smartEventService;
-        private SpotifyService? _spotifyService;
+        private MediaSessionService? _mediaSessionService;
         private ActiveWindowService? _activeWindowService;
 
         #endregion
@@ -280,9 +321,12 @@ namespace NI.ViewModels
             _smartEventService = new SmartEventService(_settings);
             _smartEventService.SmartEventGenerated += OnSmartEvent;
 
-            // Spotify service (no internal timer - we call it)
-            _spotifyService = new SpotifyService();
-            _spotifyService.TrackChanged += OnSpotifyTrackChanged;
+            // Media session service (SINGLE SOURCE OF TRUTH for Spotify)
+            _mediaSessionService = new MediaSessionService();
+            _mediaSessionService.PlaybackStateChanged += OnPlaybackStateChanged;
+            _mediaSessionService.MediaPropertiesChanged += OnMediaPropertiesChanged;
+            _mediaSessionService.PositionChanged += OnPositionChanged;
+            _ = _mediaSessionService.InitializeAsync(); // Fire and forget - intentional
 
             // Active window service
             _activeWindowService = new ActiveWindowService();
@@ -313,14 +357,7 @@ namespace NI.ViewModels
                 ClockText = DateTime.Now.ToString("HH:mm");
             }
 
-            // Spotify check every 3 seconds (every tick)
-            _spotifyService?.CheckSpotify();
-
-            // Update track progress when Spotify is playing
-            if (IsSpotifyPlaying && ShowProgress)
-            {
-                TrackProgress = Math.Min(1.0, TrackProgress + 0.01);
-            }
+            // Spotify is handled by events, no timer updates needed
 
             // Active window check every tick (3s) - only if not showing higher priority content
             if (_currentPriority == SmartEventPriority.Idle || _currentPriority == SmartEventPriority.Smart)
@@ -346,8 +383,8 @@ namespace NI.ViewModels
             var info = _activeWindowService?.CheckActiveWindow();
             if (info != null && !info.IsDesktop)
             {
-                // Don't override higher priority items
-                if (_currentPriority <= SmartEventPriority.Smart && !ShowHeadphoneBanner && !IsSpotifyPlaying)
+                // SIMPLIFIED: Don't override Spotify (single source of truth) or higher priority items
+                if (_currentPriority <= SmartEventPriority.Smart && !ShowHeadphoneBanner && !IsSpotifyActive)
                 {
                     ShowActiveWindow = true;
                     ActiveWindowName = info.AppName;
@@ -361,7 +398,8 @@ namespace NI.ViewModels
         {
             System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
-                if (!ShowHeadphoneBanner && !IsSpotifyPlaying && _currentPriority != SmartEventPriority.System)
+                // SIMPLIFIED: Use single source of truth IsSpotifyActive
+                if (!ShowHeadphoneBanner && !IsSpotifyActive && _currentPriority != SmartEventPriority.System)
                 {
                     ShowActiveWindow = true;
                     ActiveWindowName = e.AppName;
@@ -380,10 +418,10 @@ namespace NI.ViewModels
                 ShowHeadphoneBanner = true;
                 HeadphoneDeviceName = e.DeviceName;
                 ShowActiveWindow = false;
-                
+
                 HeadphoneBannerArrived?.Invoke(this, EventArgs.Empty);
 
-                // Auto-hide after 4 seconds
+                // Auto-hide after 4 seconds (this timer is acceptable - single instance, cleaned up)
                 _headphoneBannerTimer?.Stop();
                 _headphoneBannerTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
                 _headphoneBannerTimer.Tick += (s, args) =>
@@ -391,9 +429,9 @@ namespace NI.ViewModels
                     _headphoneBannerTimer.Stop();
                     ShowHeadphoneBanner = false;
                     HeadphoneDeviceName = "";
-                    
-                    // Return to normal content
-                    if (IsSpotifyPlaying)
+
+                    // SIMPLIFIED: Return to normal content using single source of truth
+                    if (IsSpotifyActive)
                     {
                         SpotifyChanged?.Invoke(this, EventArgs.Empty);
                     }
@@ -419,7 +457,12 @@ namespace NI.ViewModels
             _mainTimer?.Stop();
             _mainTimer = null;
             _headphoneBannerTimer?.Stop();
+            _headphoneBannerTimer = null;
             _notificationService?.Stop();
+
+            // CRITICAL: Dispose media session service to clean up event subscriptions
+            _mediaSessionService?.Dispose();
+            _mediaSessionService = null;
         }
 
         private void OnSystemNotification(object? sender, NotificationEventArgs e)
@@ -446,8 +489,8 @@ namespace NI.ViewModels
         {
             System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
-                // Smart events only show if not showing higher priority content
-                if (ShowHeadphoneBanner || IsSpotifyPlaying || _currentPriority == SmartEventPriority.System)
+                // SIMPLIFIED: Smart events only show if not showing higher priority content
+                if (ShowHeadphoneBanner || IsSpotifyActive || _currentPriority == SmartEventPriority.System)
                     return;
 
                 if (e.Priority == SmartEventPriority.Smart)
@@ -459,51 +502,88 @@ namespace NI.ViewModels
             });
         }
 
-        private void OnSpotifyTrackChanged(object? sender, SpotifyTrack? track)
+        private void OnPlaybackStateChanged(object? sender, bool isPlaying)
         {
             System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
-                if (track != null && track.IsPlaying)
-                {
-                    if (_currentPriority != SmartEventPriority.System && !ShowHeadphoneBanner)
-                    {
-                        _currentPriority = SmartEventPriority.Spotify;
-                        IsSpotifyPlaying = true;
-                        ShowActiveWindow = false;
-                        SpotifySong = track.Song;
-                        SpotifyArtist = track.Artist;
-                        
-                        AppName = "Spotify";
-                        NotificationText = $"{track.Artist} - {track.Song}";
-                        var compactDisplay = $"{track.Artist} - {track.Song}";
-                        CompactText = compactDisplay.Length > 28 ? compactDisplay.Substring(0, 25) + "..." : compactDisplay;
-                        EventIcon = "🎵";
-                        HasNotification = true;
-                        
-                        TrackProgress = 0;
-                        ShowProgress = true;
+                IsSpotifyPlaying = isPlaying;
+                UpdateSpotifyActive();
+            });
+        }
 
-                        SpotifyChanged?.Invoke(this, EventArgs.Empty);
-                    }
-                }
-                else
+        private void OnMediaPropertiesChanged(object? sender, EventArgs e)
+        {
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                if (_mediaSessionService != null)
                 {
-                    if (_currentPriority == SmartEventPriority.Spotify)
-                    {
-                        IsSpotifyPlaying = false;
-                        SpotifySong = "";
-                        SpotifyArtist = "";
-                        TrackProgress = 0;
-                        ShowProgress = false;
-                        _currentPriority = SmartEventPriority.Idle;
-                        
-                        // Return to active window
-                        UpdateActiveWindow();
-                        SpotifyChanged?.Invoke(this, EventArgs.Empty);
-                    }
+                    SpotifySong = _mediaSessionService.TrackTitle;
+                    SpotifyArtist = _mediaSessionService.ArtistName;
+                    AlbumArtwork = _mediaSessionService.AlbumArtwork;
+                    CurrentPosition = _mediaSessionService.CurrentPosition;
+                    TotalDuration = _mediaSessionService.TotalDuration;
+                    UpdateSpotifyActive();
                 }
             });
         }
+
+        private void OnPositionChanged(object? sender, EventArgs e)
+        {
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                if (_mediaSessionService != null)
+                {
+                    CurrentPosition = _mediaSessionService.CurrentPosition;
+                }
+            });
+        }
+
+        private void UpdateSpotifyActive()
+        {
+            // RULE: IsSpotifyActive = true ONLY if track title AND artist exist
+            bool hasTrackInfo = !string.IsNullOrEmpty(SpotifySong) && !string.IsNullOrEmpty(SpotifyArtist);
+            IsSpotifyActive = hasTrackInfo;
+
+            if (IsSpotifyActive)
+            {
+                // Hide active window when Spotify is active
+                ShowActiveWindow = false;
+            }
+            else
+            {
+                // Show active window when Spotify is not active
+                UpdateActiveWindow();
+            }
+        }
+
+
+        #region Media Control Commands
+
+        public async void TogglePlayPause()
+        {
+            if (_mediaSessionService != null)
+            {
+                await _mediaSessionService.TogglePlayPauseAsync();
+            }
+        }
+
+        public async void SkipPrevious()
+        {
+            if (_mediaSessionService != null)
+            {
+                await _mediaSessionService.TrySkipPreviousAsync();
+            }
+        }
+
+        public async void SkipNext()
+        {
+            if (_mediaSessionService != null)
+            {
+                await _mediaSessionService.TrySkipNextAsync();
+            }
+        }
+
+        #endregion
 
         private void ApplySmartEvent(SmartEvent e)
         {

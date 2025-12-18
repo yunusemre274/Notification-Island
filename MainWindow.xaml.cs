@@ -24,7 +24,14 @@ namespace NI
             InitializeComponent();
             Loaded += OnLoaded;
             Closing += OnClosing;
+            KeyDown += OnMainWindowKeyDown;
         }
+
+        private void OnMainWindowKeyDown(object sender, KeyEventArgs e)
+        {
+            // REMOVED: System Info and AI Assistant keyboard shortcuts (features disabled for stability)
+        }
+
 
         private void OnLoaded(object sender, RoutedEventArgs e)
         {

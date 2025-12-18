@@ -1,40 +1,123 @@
 using System;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Threading;
 using NI.Services;
+using NI.Services.AI;
 using NI.ViewModels;
+
 using NI.Views.Controls;
 
 namespace NI.Views
 {
     public enum PanelType { None, Wifi, Sound, ControlCenter }
 
-    public partial class IslandView : UserControl
+    /// <summary>
+    /// Music Island State - Controls hover and click expansion
+    /// </summary>
+    public enum MusicIslandState
+    {
+        Compact,         // Minimal pill
+        HoverExpanded,   // Wider with album art and basic controls
+        FullExpanded     // Full card with timeline and all controls
+    }
+
+    /// <summary>
+    /// SINGLE SOURCE OF TRUTH for Island UI state
+    /// </summary>
+    public enum IslandState
+    {
+        Default,        // Compact pill - Active Window, idle, etc.
+        MusicExpanded   // Square card - Spotify playback
+    }
+
+    public partial class IslandView : UserControl, INotifyPropertyChanged
     {
         private IslandVM _vm = null!;
-        private bool _isExpanded = false;
-        private bool _isHovering = false;
-        
+
+        // SINGLE STATE PROPERTY - controls ALL visibility
+        private IslandState _currentState = IslandState.Default;
+        public IslandState CurrentState
+        {
+            get => _currentState;
+            private set
+            {
+                if (_currentState != value)
+                {
+                    _currentState = value;
+                    OnPropertyChanged(nameof(CurrentState));
+                    OnPropertyChanged(nameof(IsDefault));
+                    OnPropertyChanged(nameof(IsMusicExpanded));
+
+                    // Animate size when state changes
+                    AnimateToCurrentState();
+                }
+            }
+        }
+
+        // Helper properties for XAML binding
+        public bool IsDefault => CurrentState == IslandState.Default;
+        public bool IsMusicExpanded => CurrentState == IslandState.MusicExpanded;
+
+        // Music island state (for hover/click expansion)
+        private MusicIslandState _musicState = MusicIslandState.Compact;
+        public MusicIslandState MusicState
+        {
+            get => _musicState;
+            private set
+            {
+                if (_musicState != value)
+                {
+                    _musicState = value;
+                    OnPropertyChanged(nameof(MusicState));
+                    OnPropertyChanged(nameof(IsCompact));
+                    OnPropertyChanged(nameof(IsHoverExpanded));
+                    OnPropertyChanged(nameof(IsFullExpanded));
+
+                    // Animate size when music state changes
+                    if (CurrentState == IslandState.MusicExpanded)
+                    {
+                        AnimateToCurrentState();
+                    }
+                }
+            }
+        }
+
+        // Helper properties for music state
+        public bool IsCompact => MusicState == MusicIslandState.Compact;
+        public bool IsHoverExpanded => MusicState == MusicIslandState.HoverExpanded;
+        public bool IsFullExpanded => MusicState == MusicIslandState.FullExpanded;
+
         // Panel state
         private PanelType _currentPanel = PanelType.None;
         private WifiPanel? _wifiPanel;
         private SoundPanel? _soundPanel;
 
+        // REMOVED: MediaSessionService (now ONLY in IslandVM to prevent double initialization)
+
+        // REMOVED: SystemMonitor and AI features (non-essential, causing complexity)
+        // private SystemMonitorService? _systemMonitor;
+        // private bool _isSystemInfoVisible;
+        // private AiAssistantService? _aiAssistant;
+        // private CancellationTokenSource? _aiCancellationTokenSource;
+
         // Event for MainWindow to handle Control Center
         public event EventHandler<PanelType>? PanelRequested;
 
+
+
         // Animation durations - FASTER for snappy HyperOS feel
-        private static readonly Duration ExpandDuration = TimeSpan.FromMilliseconds(130);
-        private static readonly Duration CompactDuration = TimeSpan.FromMilliseconds(110);
+        private static readonly Duration TransitionDuration = TimeSpan.FromMilliseconds(250);
 
         // Sizes
-        private const double CompactWidth = 350;
-        private const double CompactHeight = 36;
-        private const double ExpandedWidth = 680;
-        private const double ExpandedHeight = 50;
+        private const double DefaultWidth = 350;
+        private const double DefaultHeight = 36;
+        private const double MusicCardWidth = 320;
+        private const double MusicCardHeight = 90;
 
         public IslandView()
         {
@@ -45,8 +128,41 @@ namespace NI.Views
             _vm.SpotifyChanged += OnSpotifyChanged;
             _vm.HeadphoneBannerArrived += OnHeadphoneBannerArrived;
             _vm.ActiveWindowChanged += OnActiveWindowChanged;
+
+            // CRITICAL: Subscribe to IsSpotifyActive changes for automatic state transition
+            _vm.PropertyChanged += OnViewModelPropertyChanged;
+
             _vm.Start();
+
+            // REMOVED: MediaSessionService initialization (now ONLY in IslandVM)
+            // REMOVED: SystemMonitor and AI initialization (non-essential features)
         }
+
+        /// <summary>
+        /// SINGLE PLACE for state transition logic
+        /// </summary>
+        private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(_vm.IsSpotifyActive))
+            {
+                // AUTOMATIC STATE TRANSITION (ONLY PLACE)
+                if (_vm.IsSpotifyActive)
+                {
+                    CurrentState = IslandState.MusicExpanded;
+                    MusicState = MusicIslandState.Compact; // Start compact
+                }
+                else
+                {
+                    CurrentState = IslandState.Default;
+                    MusicState = MusicIslandState.Compact; // Reset
+                }
+            }
+        }
+
+        // REMOVED: All non-essential features (System Monitor, AI Assistant) to reduce complexity and crashes
+
+
+        // REMOVED: InitializeMediaSessionAsync - duplicate initialization caused crashes
 
         /// <summary>
         /// Called by MainWindow when visibility changes. Pauses/resumes VM timers.
@@ -60,25 +176,20 @@ namespace NI.Views
 
         private void OnMouseEnter(object sender, MouseEventArgs e)
         {
-            _isHovering = true;
-            Expand();
+            // Hover expand when Spotify is active and not fully expanded
+            if (CurrentState == IslandState.MusicExpanded && MusicState == MusicIslandState.Compact)
+            {
+                MusicState = MusicIslandState.HoverExpanded;
+            }
         }
 
         private void OnMouseLeave(object sender, MouseEventArgs e)
         {
-            _isHovering = false;
-            // Reduced delay for snappier response
-            var timer = new System.Windows.Threading.DispatcherTimer
+            // Collapse to compact when leaving (unless fully expanded)
+            if (CurrentState == IslandState.MusicExpanded && MusicState == MusicIslandState.HoverExpanded)
             {
-                Interval = TimeSpan.FromMilliseconds(100)
-            };
-            timer.Tick += (s, args) =>
-            {
-                timer.Stop();
-                if (!_isHovering && _currentPanel == PanelType.None)
-                    Compact();
-            };
-            timer.Start();
+                MusicState = MusicIslandState.Compact;
+            }
         }
 
         #endregion
@@ -87,7 +198,23 @@ namespace NI.Views
 
         private void OnLeftClick(object sender, MouseButtonEventArgs e)
         {
-            PlayPulse();
+            // Toggle full expansion when Spotify is active
+            if (CurrentState == IslandState.MusicExpanded)
+            {
+                if (MusicState == MusicIslandState.FullExpanded)
+                {
+                    MusicState = MusicIslandState.Compact;
+                }
+                else
+                {
+                    MusicState = MusicIslandState.FullExpanded;
+                }
+                e.Handled = true;
+            }
+            else
+            {
+                PlayPulse();
+            }
         }
 
         private void OnRightClick(object sender, MouseButtonEventArgs e)
@@ -123,7 +250,28 @@ namespace NI.Views
             PanelRequested?.Invoke(this, PanelType.ControlCenter);
         }
 
+        private void OnTogglePlayPause(object sender, MouseButtonEventArgs e)
+        {
+            e.Handled = true;
+            _vm.TogglePlayPause();
+        }
+
+        private void OnSkipPrevious(object sender, MouseButtonEventArgs e)
+        {
+            e.Handled = true;
+            _vm.SkipPrevious();
+        }
+
+        private void OnSkipNext(object sender, MouseButtonEventArgs e)
+        {
+            e.Handled = true;
+            _vm.SkipNext();
+        }
+
         #endregion
+
+        // REMOVED: Media Control Handlers - duplicate subscriptions caused crashes
+        // REMOVED: System Info Card and AI Assistant features - non-essential complexity
 
         #region Panel Management
 
@@ -174,7 +322,7 @@ namespace NI.Views
                     break;
             }
 
-            Expand();
+            // REMOVED: Expand() - panels handle their own sizing
         }
 
         private void CloseCurrentPanel(Action? onComplete = null)
@@ -222,73 +370,22 @@ namespace NI.Views
 
         private void OnNotificationArrived(object? sender, EventArgs e)
         {
-            Dispatcher.Invoke(() =>
-            {
-                Expand();
-                
-                // Auto-compact after 4 seconds
-                var timer = new System.Windows.Threading.DispatcherTimer
-                {
-                    Interval = TimeSpan.FromSeconds(4)
-                };
-                timer.Tick += (s, args) =>
-                {
-                    timer.Stop();
-                    if (!_isHovering)
-                        Compact();
-                };
-                timer.Start();
-            });
+            // REMOVED: State managed automatically by IsSpotifyActive
         }
 
         private void OnSmartEventArrived(object? sender, EventArgs e)
         {
-            Dispatcher.Invoke(() =>
-            {
-                Expand();
-                
-                var timer = new System.Windows.Threading.DispatcherTimer
-                {
-                    Interval = TimeSpan.FromSeconds(6)
-                };
-                timer.Tick += (s, args) =>
-                {
-                    timer.Stop();
-                    if (!_isHovering)
-                        Compact();
-                };
-                timer.Start();
-            });
+            // REMOVED: State managed automatically by IsSpotifyActive
         }
 
         private void OnSpotifyChanged(object? sender, EventArgs e)
         {
-            Dispatcher.Invoke(() =>
-            {
-                UpdateExpandedContentVisibility();
-            });
+            // REMOVED: State managed automatically by IsSpotifyActive via PropertyChanged
         }
 
         private void OnHeadphoneBannerArrived(object? sender, EventArgs e)
         {
-            Dispatcher.Invoke(() =>
-            {
-                UpdateExpandedContentVisibility();
-                Expand();
-                
-                // Auto-compact after 4 seconds
-                var timer = new System.Windows.Threading.DispatcherTimer
-                {
-                    Interval = TimeSpan.FromSeconds(4)
-                };
-                timer.Tick += (s, args) =>
-                {
-                    timer.Stop();
-                    if (!_isHovering)
-                        Compact();
-                };
-                timer.Start();
-            });
+            // REMOVED: State managed automatically by IsSpotifyActive
         }
 
         private void OnActiveWindowChanged(object? sender, EventArgs e)
@@ -296,7 +393,7 @@ namespace NI.Views
             Dispatcher.Invoke(() =>
             {
                 UpdateActiveWindowIcon();
-                UpdateExpandedContentVisibility();
+                // REMOVED: UpdateExpandedContentVisibility - state is automatic
             });
         }
 
@@ -308,8 +405,7 @@ namespace NI.Views
                 var icon = Resources[iconKey] as ImageSource;
                 if (ActiveWindowIconCompact != null)
                     ActiveWindowIconCompact.Source = icon;
-                if (ActiveWindowIconExpanded != null)
-                    ActiveWindowIconExpanded.Source = icon;
+                // REMOVED: ActiveWindowIconExpanded - no longer exists in XAML
             }
             else
             {
@@ -317,100 +413,80 @@ namespace NI.Views
                 var icon = Resources["AppIcon"] as ImageSource;
                 if (ActiveWindowIconCompact != null)
                     ActiveWindowIconCompact.Source = icon;
-                if (ActiveWindowIconExpanded != null)
-                    ActiveWindowIconExpanded.Source = icon;
+                // REMOVED: ActiveWindowIconExpanded - no longer exists in XAML
             }
         }
 
-        private void UpdateExpandedContentVisibility()
-        {
-            // Priority: HeadphoneBanner > Spotify > ActiveWindow > Notification
-            if (_vm.ShowHeadphoneBanner)
-            {
-                HeadphoneBannerExpanded.Visibility = Visibility.Visible;
-                SpotifyContent.Visibility = Visibility.Collapsed;
-                ActiveWindowExpanded.Visibility = Visibility.Collapsed;
-                NotificationContent.Visibility = Visibility.Collapsed;
-            }
-            else if (_vm.IsSpotifyPlaying)
-            {
-                HeadphoneBannerExpanded.Visibility = Visibility.Collapsed;
-                SpotifyContent.Visibility = Visibility.Visible;
-                ActiveWindowExpanded.Visibility = Visibility.Collapsed;
-                NotificationContent.Visibility = Visibility.Collapsed;
-            }
-            else if (_vm.ShowActiveWindow)
-            {
-                HeadphoneBannerExpanded.Visibility = Visibility.Collapsed;
-                SpotifyContent.Visibility = Visibility.Collapsed;
-                ActiveWindowExpanded.Visibility = Visibility.Visible;
-                NotificationContent.Visibility = Visibility.Collapsed;
-            }
-            else
-            {
-                HeadphoneBannerExpanded.Visibility = Visibility.Collapsed;
-                SpotifyContent.Visibility = Visibility.Collapsed;
-                ActiveWindowExpanded.Visibility = Visibility.Collapsed;
-                NotificationContent.Visibility = Visibility.Visible;
-            }
-        }
+        // REMOVED: UpdateExpandedContentVisibility - replaced by automatic state transitions
 
         #endregion
 
-        #region Animations - FAST HyperOS Style
+        #region Animations - Simple State Transitions
 
-        private void Expand()
+        /// <summary>
+        /// Animates to the current state size (called automatically when CurrentState changes)
+        /// </summary>
+        private void AnimateToCurrentState()
         {
-            if (_isExpanded) return;
-            _isExpanded = true;
+            double targetWidth, targetHeight, targetCornerRadius, targetScale;
 
+            if (CurrentState == IslandState.MusicExpanded)
+            {
+                // Music state determines the size
+                switch (MusicState)
+                {
+                    case MusicIslandState.FullExpanded:
+                        targetWidth = 380;
+                        targetHeight = 110;
+                        targetCornerRadius = 24;
+                        targetScale = 1.01;
+                        break;
+
+                    case MusicIslandState.HoverExpanded:
+                        targetWidth = 350;
+                        targetHeight = 86;
+                        targetCornerRadius = 22;
+                        targetScale = 1.005;
+                        break;
+
+                    case MusicIslandState.Compact:
+                    default:
+                        targetWidth = 300;
+                        targetHeight = 74;
+                        targetCornerRadius = 20;
+                        targetScale = 1.0;
+                        break;
+                }
+            }
+            else
+            {
+                // Default state
+                targetWidth = DefaultWidth;
+                targetHeight = DefaultHeight;
+                targetCornerRadius = 18;
+                targetScale = 1.0;
+            }
+
+            // Smooth cubic easing for organic feel
             var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
 
-            var widthAnim = new DoubleAnimation(ExpandedWidth, ExpandDuration) { EasingFunction = ease };
+            // Animate size
+            var widthAnim = new DoubleAnimation(targetWidth, TransitionDuration) { EasingFunction = ease };
             IslandBorder.BeginAnimation(WidthProperty, widthAnim);
 
-            var heightAnim = new DoubleAnimation(ExpandedHeight, ExpandDuration) { EasingFunction = ease };
+            var heightAnim = new DoubleAnimation(targetHeight, TransitionDuration) { EasingFunction = ease };
             IslandBorder.BeginAnimation(HeightProperty, heightAnim);
 
-            IslandBorder.CornerRadius = new CornerRadius(25);
+            // Subtle scale for premium feel
+            var scaleXAnim = new DoubleAnimation(targetScale, TransitionDuration) { EasingFunction = ease };
+            var scaleYAnim = new DoubleAnimation(targetScale, TransitionDuration) { EasingFunction = ease };
+            IslandScale.BeginAnimation(ScaleTransform.ScaleXProperty, scaleXAnim);
+            IslandScale.BeginAnimation(ScaleTransform.ScaleYProperty, scaleYAnim);
 
-            // Faster content transitions
-            var fadeOutCompact = new DoubleAnimation(0, TimeSpan.FromMilliseconds(50));
-            var fadeInExpanded = new DoubleAnimation(1, TimeSpan.FromMilliseconds(80)) 
-            { 
-                BeginTime = TimeSpan.FromMilliseconds(40) 
-            };
-
-            CompactContent.BeginAnimation(OpacityProperty, fadeOutCompact);
-            ExpandedContent.BeginAnimation(OpacityProperty, fadeInExpanded);
-            ExpandedContent.IsHitTestVisible = true;
-        }
-
-        private void Compact()
-        {
-            if (!_isExpanded) return;
-            _isExpanded = false;
-
-            var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-
-            var widthAnim = new DoubleAnimation(CompactWidth, CompactDuration) { EasingFunction = ease };
-            IslandBorder.BeginAnimation(WidthProperty, widthAnim);
-
-            var heightAnim = new DoubleAnimation(CompactHeight, CompactDuration) { EasingFunction = ease };
-            IslandBorder.BeginAnimation(HeightProperty, heightAnim);
-
-            IslandBorder.CornerRadius = new CornerRadius(18);
-
-            // Faster content transitions
-            var fadeOutExpanded = new DoubleAnimation(0, TimeSpan.FromMilliseconds(50));
-            var fadeInCompact = new DoubleAnimation(1, TimeSpan.FromMilliseconds(70)) 
-            { 
-                BeginTime = TimeSpan.FromMilliseconds(30) 
-            };
-
-            ExpandedContent.BeginAnimation(OpacityProperty, fadeOutExpanded);
-            ExpandedContent.IsHitTestVisible = false;
-            CompactContent.BeginAnimation(OpacityProperty, fadeInCompact);
+            // Smooth corner radius transition
+            var cornerAnim = new DoubleAnimation(targetCornerRadius, TransitionDuration) { EasingFunction = ease };
+            IslandBorder.BeginAnimation(Border.CornerRadiusProperty, null);
+            IslandBorder.CornerRadius = new CornerRadius(targetCornerRadius);
         }
 
         private void PlayPulse()
@@ -446,6 +522,49 @@ namespace NI.Views
             sb.Begin();
         }
 
+        private void StartSpotifyBarAnimations()
+        {
+            if (_vm == null || !_vm.IsSpotifyActive || !_vm.IsSpotifyPlaying)
+                return;
+
+            var bar1 = FindName("SpotifyBar1") as FrameworkElement;
+            var bar2 = FindName("SpotifyBar2") as FrameworkElement;
+            var bar3 = FindName("SpotifyBar3") as FrameworkElement;
+
+            // Animate bars with different phases
+            if (bar1 != null) AnimateSpotifyBar(bar1, 8, 16, 0.4);
+            if (bar2 != null) AnimateSpotifyBar(bar2, 10, 20, 0.6);
+            if (bar3 != null) AnimateSpotifyBar(bar3, 6, 14, 0.5);
+        }
+
+        private void AnimateSpotifyBar(FrameworkElement bar, double minHeight, double maxHeight, double duration)
+        {
+            if (bar == null) return;
+
+            var anim = new DoubleAnimation
+            {
+                From = minHeight,
+                To = maxHeight,
+                Duration = TimeSpan.FromSeconds(duration),
+                AutoReverse = true,
+                RepeatBehavior = RepeatBehavior.Forever,
+                EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
+            };
+
+            bar.BeginAnimation(HeightProperty, anim);
+        }
+
+        private void StopSpotifyBarAnimations()
+        {
+            var bar1 = FindName("SpotifyBar1") as FrameworkElement;
+            var bar2 = FindName("SpotifyBar2") as FrameworkElement;
+            var bar3 = FindName("SpotifyBar3") as FrameworkElement;
+
+            bar1?.BeginAnimation(HeightProperty, null);
+            bar2?.BeginAnimation(HeightProperty, null);
+            bar3?.BeginAnimation(HeightProperty, null);
+        }
+
         public void FadeIn()
         {
             var fadeIn = new DoubleAnimation(1, TimeSpan.FromMilliseconds(150));
@@ -458,6 +577,16 @@ namespace NI.Views
             if (onComplete != null)
                 fadeOut.Completed += (s, e) => onComplete();
             BeginAnimation(OpacityProperty, fadeOut);
+        }
+
+        #endregion
+
+        #region INotifyPropertyChanged
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+        protected void OnPropertyChanged(string propertyName)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
 
         #endregion
