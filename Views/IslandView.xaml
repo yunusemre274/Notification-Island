@@ -178,7 +178,7 @@
             </DrawingImage.Drawing>
         </DrawingImage>
         
-        <!-- Premium iOS-style progress bar -->
+        <!-- PHASE 3: Premium iOS-style progress bar (NO GLOW - pure black) -->
         <Style x:Key="SpotifyProgressBar" TargetType="ProgressBar">
             <Setter Property="Height" Value="4"/>
             <Setter Property="Background" Value="#20FFFFFF"/>
@@ -192,11 +192,7 @@
                                 <Border x:Name="PART_Indicator"
                                         Background="{TemplateBinding Foreground}"
                                         CornerRadius="2"
-                                        HorizontalAlignment="Left">
-                                    <Border.Effect>
-                                        <DropShadowEffect Color="#1DB954" BlurRadius="6" Opacity="0.5" ShadowDepth="0"/>
-                                    </Border.Effect>
-                                </Border>
+                                        HorizontalAlignment="Left"/>
                             </Border>
                         </Border>
                     </ControlTemplate>
@@ -206,20 +202,21 @@
     </UserControl.Resources>
 
     <Grid x:Name="RootGrid">
-        <!-- Main Island Pill -->
+        <!-- CANVAS SPEC: Main Island Pill (420x48px, radius 24px) -->
         <Border x:Name="IslandBorder"
-                Width="350" Height="36"
-                CornerRadius="18"
-                Background="{StaticResource IslandBackground}"
+                Width="420" Height="48"
+                CornerRadius="24"
+                Background="#000000"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Top"
                 Panel.ZIndex="5000"
                 RenderTransformOrigin="0.5,0.5">
             <Border.Effect>
+                <!-- CANVAS SPEC: Shadow 0px 6px 20px rgba(0,0,0,0.35) -->
                 <DropShadowEffect Color="#000000"
-                                  BlurRadius="40"
-                                  Opacity="0.6"
-                                  ShadowDepth="8"
+                                  BlurRadius="20"
+                                  Opacity="0.35"
+                                  ShadowDepth="6"
                                   Direction="270"/>
             </Border.Effect>
             <Border.RenderTransform>
@@ -228,38 +225,53 @@
                 </TransformGroup>
             </Border.RenderTransform>
 
-            <Grid Margin="12,0">
-                <!-- PHASE 1: IDLE MODE - Time + Search + Weather -->
+            <!-- CANVAS SPEC: Horizontal padding 16px, Vertical padding 8px -->
+            <Grid Margin="16,8">
+                <!-- CANVAS SPEC: IDLE MODE (420x48px) -->
                 <Grid x:Name="IdleContent"
                       Visibility="{Binding IsIdle, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>   <!-- Time -->
-                        <ColumnDefinition Width="8"/>       <!-- Spacer -->
-                        <ColumnDefinition Width="*"/>       <!-- Search Bar -->
-                        <ColumnDefinition Width="8"/>       <!-- Spacer -->
-                        <ColumnDefinition Width="Auto"/>    <!-- Weather -->
+                        <ColumnDefinition Width="Auto"/>   <!-- Time + Dot -->
+                        <ColumnDefinition Width="8"/>      <!-- Spacer -->
+                        <ColumnDefinition Width="*"/>      <!-- Search Bar -->
+                        <ColumnDefinition Width="8"/>      <!-- Spacer -->
+                        <ColumnDefinition Width="Auto"/>   <!-- Weather -->
                     </Grid.ColumnDefinitions>
 
-                    <!-- LEFT: Time (HH:mm format) -->
-                    <TextBlock Grid.Column="0"
-                               x:Name="ClockText"
-                               Text="{Binding ClockText}"
-                               FontFamily="Segoe UI"
-                               FontSize="13"
-                               FontWeight="SemiBold"
-                               Foreground="#FFFFFF"
-                               VerticalAlignment="Center"
-                               Margin="0"/>
+                    <!-- CANVAS SPEC: LEFT - Time + Green Dot -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                        <!-- CANVAS SPEC: Time text 14px, medium weight -->
+                        <TextBlock x:Name="ClockText"
+                                   Text="{Binding ClockText}"
+                                   FontFamily="Segoe UI"
+                                   FontSize="14"
+                                   FontWeight="Medium"
+                                   Foreground="#FFFFFF"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,6,0"/>
 
-                    <!-- CENTER: Search Bar (functional TextBox) -->
+                        <!-- CANVAS SPEC: Status dot 8px circle -->
+                        <Ellipse Width="8" Height="8"
+                                 Fill="#1DB954"
+                                 VerticalAlignment="Center">
+                            <Ellipse.Effect>
+                                <DropShadowEffect Color="#1DB954"
+                                                  BlurRadius="4"
+                                                  Opacity="0.6"
+                                                  ShadowDepth="0"/>
+                            </Ellipse.Effect>
+                        </Ellipse>
+                    </StackPanel>
+
+                    <!-- CANVAS SPEC: CENTER - Search Bar (height 32px, radius 16px) -->
                     <Border Grid.Column="2"
                             Background="#15FFFFFF"
-                            CornerRadius="10"
-                            Height="24"
+                            CornerRadius="16"
+                            Height="32"
                             VerticalAlignment="Center">
                         <TextBox x:Name="SearchTextBox"
                                  FontFamily="Segoe UI"
-                                 FontSize="11"
+                                 FontSize="13"
                                  FontWeight="Normal"
                                  Foreground="#FFFFFF"
                                  Background="Transparent"
@@ -279,7 +291,7 @@
                                                                   VerticalAlignment="Center"/>
                                                     <TextBlock Text="Search or ask..."
                                                                FontFamily="Segoe UI"
-                                                               FontSize="11"
+                                                               FontSize="13"
                                                                Foreground="#80FFFFFF"
                                                                VerticalAlignment="Center"
                                                                Margin="16,0"
@@ -304,20 +316,21 @@
                         </TextBox>
                     </Border>
 
-                    <!-- RIGHT: Weather (Temperature + Icon) -->
+                    <!-- CANVAS SPEC: RIGHT - Temperature + Weather Icon -->
                     <StackPanel Grid.Column="4"
                                 Orientation="Horizontal"
                                 VerticalAlignment="Center">
-                        <TextBlock x:Name="WeatherTemp"
-                                   Text="22°"
+                        <!-- CANVAS SPEC: Temperature text 14px -->
+                        <TextBlock Text="{Binding WeatherTemp}"
                                    FontFamily="Segoe UI"
-                                   FontSize="13"
-                                   FontWeight="SemiBold"
+                                   FontSize="14"
+                                   FontWeight="Medium"
                                    Foreground="#FFFFFF"
                                    VerticalAlignment="Center"
                                    Margin="0,0,4,0"/>
-                        <TextBlock Text="☀️"
-                                   FontSize="14"
+                        <!-- CANVAS SPEC: Weather icon size 18px -->
+                        <TextBlock Text="{Binding WeatherIcon}"
+                                   FontSize="18"
                                    VerticalAlignment="Center"/>
                     </StackPanel>
                 </Grid>
@@ -365,19 +378,12 @@
                         <ColumnDefinition Width="Auto"/>   <!-- Waveform -->
                     </Grid.ColumnDefinitions>
 
-                    <!-- Spotify Logo -->
+                    <!-- Spotify Logo (PHASE 3: No glow - pure black design) -->
                     <Image Grid.Column="0"
                            Width="18"
                            Height="18"
                            Source="{StaticResource SpotifyLogo}"
-                           VerticalAlignment="Center">
-                        <Image.Effect>
-                            <DropShadowEffect Color="#1DB954"
-                                              BlurRadius="8"
-                                              Opacity="0.5"
-                                              ShadowDepth="0"/>
-                        </Image.Effect>
-                    </Image>
+                           VerticalAlignment="Center"/>
 
                     <!-- Track Info (centered) -->
                     <StackPanel Grid.Column="2"
@@ -404,23 +410,23 @@
                                    Margin="0,2,0,0"/>
                     </StackPanel>
 
-                    <!-- Waveform Animation (playing indicator) -->
+                    <!-- CANVAS SPEC: Waveform (height 16px max, spacing 2px) -->
                     <StackPanel Grid.Column="4"
                                 Orientation="Horizontal"
                                 VerticalAlignment="Center">
-                        <Rectangle Width="2" Height="8" Fill="#1DB954" RadiusX="1" RadiusY="1" Opacity="0.8" Margin="0,0,2,0"/>
-                        <Rectangle Width="2" Height="12" Fill="#1DB954" RadiusX="1" RadiusY="1" Opacity="0.9" Margin="0,0,2,0"/>
-                        <Rectangle Width="2" Height="6" Fill="#1DB954" RadiusX="1" RadiusY="1" Opacity="0.7" Margin="0,0,2,0"/>
-                        <Rectangle Width="2" Height="10" Fill="#1DB954" RadiusX="1" RadiusY="1" Opacity="0.8"/>
+                        <Rectangle Width="2" Height="10" Fill="#1DB954" RadiusX="1" RadiusY="1" Opacity="0.8" Margin="0,0,2,0"/>
+                        <Rectangle Width="2" Height="16" Fill="#1DB954" RadiusX="1" RadiusY="1" Opacity="0.9" Margin="0,0,2,0"/>
+                        <Rectangle Width="2" Height="8" Fill="#1DB954" RadiusX="1" RadiusY="1" Opacity="0.7" Margin="0,0,2,0"/>
+                        <Rectangle Width="2" Height="14" Fill="#1DB954" RadiusX="1" RadiusY="1" Opacity="0.8"/>
                     </StackPanel>
                 </Grid>
 
-                <!-- SpotifyExpanded: Album + Controls + Timeline -->
+                <!-- CANVAS SPEC: Spotify Expanded (380x140px, radius 28px) -->
                 <Grid x:Name="SpotifyExpandedContent"
                       Visibility="{Binding IsSpotifyExpanded, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>  <!-- Main content -->
-                        <RowDefinition Height="Auto"/>  <!-- Progress bar (FullExpanded only) -->
+                        <RowDefinition Height="Auto"/>  <!-- Progress bar -->
                     </Grid.RowDefinitions>
 
                     <Grid Grid.Row="0">
@@ -430,8 +436,8 @@
                             <ColumnDefinition Width="Auto"/>  <!-- Controls -->
                         </Grid.ColumnDefinitions>
 
-                        <!-- Album Art (DOMINANT ELEMENT) -->
-                        <Border Grid.Column="0" Width="62" Height="62" CornerRadius="12"
+                        <!-- CANVAS SPEC: Album Art (56x56px, radius 12px) -->
+                        <Border Grid.Column="0" Width="56" Height="56" CornerRadius="12"
                                 Background="#1A1A1A" Margin="0,0,12,0">
                             <Border.Effect>
                                 <DropShadowEffect Color="#000000" BlurRadius="12" Opacity="0.4" ShadowDepth="2"/>
@@ -440,7 +446,7 @@
                                    Source="{Binding AlbumArtwork}"
                                    Stretch="UniformToFill">
                                 <Image.Clip>
-                                    <RectangleGeometry Rect="0,0,62,62" RadiusX="12" RadiusY="12"/>
+                                    <RectangleGeometry Rect="0,0,56,56" RadiusX="12" RadiusY="12"/>
                                 </Image.Clip>
                             </Image>
                         </Border>
@@ -450,51 +456,48 @@
                             <!-- Spotify Logo (minimal) -->
                             <Image Width="10" Height="10" Source="{StaticResource SpotifyLogo}"
                                    HorizontalAlignment="Left" Margin="0,0,0,6"
-                                   Opacity="0.6">
-                                <Image.Effect>
-                                    <DropShadowEffect Color="#1DB954" BlurRadius="4" Opacity="0.3" ShadowDepth="0"/>
-                                </Image.Effect>
-                            </Image>
+                                   Opacity="0.6"/>
 
-                            <!-- Track Title (SECONDARY) -->
+                            <!-- CANVAS SPEC: Track Title (15px, semibold) -->
                             <TextBlock Text="{Binding SpotifySong}"
-                                       FontWeight="Medium" FontSize="13"
-                                       Foreground="#E6FFFFFF"
+                                       FontWeight="SemiBold" FontSize="15"
+                                       Foreground="#FFFFFF"
                                        TextTrimming="CharacterEllipsis"
                                        MaxWidth="180"/>
 
-                            <!-- Artist (TERTIARY) -->
+                            <!-- CANVAS SPEC: Artist (13px, opacity 0.75) -->
                             <TextBlock Text="{Binding SpotifyArtist}"
-                                       FontSize="11"
-                                       Foreground="#B3FFFFFF"
+                                       FontSize="13"
+                                       Foreground="#FFFFFF"
+                                       Opacity="0.75"
                                        TextTrimming="CharacterEllipsis"
                                        MaxWidth="180"
                                        Margin="0,3,0,0"/>
                         </StackPanel>
 
-                        <!-- Media Controls (always visible when SpotifyExpanded) -->
+                        <!-- CANVAS SPEC: Media Controls (28x28px) -->
                         <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
 
-                            <!-- Previous Button -->
-                            <Border Width="30" Height="30" Background="#1A1A1A" CornerRadius="15"
+                            <!-- CANVAS SPEC: Previous Button (28x28px) -->
+                            <Border Width="28" Height="28" Background="#1A1A1A" CornerRadius="14"
                                     Cursor="Hand" MouseLeftButtonDown="OnSkipPrevious"
                                     Margin="0,0,6,0" Opacity="0.85">
                                 <Border.Effect>
                                     <DropShadowEffect Color="#000000" BlurRadius="8" Opacity="0.3" ShadowDepth="1"/>
                                 </Border.Effect>
-                                <Path Fill="#CCFFFFFF" Stretch="Uniform" Width="13" Height="13"
+                                <Path Fill="#CCFFFFFF" Stretch="Uniform" Width="12" Height="12"
                                       Data="M6,18V6H8V18H6M9.5,12L18,6V18L9.5,12Z"
                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             </Border>
 
-                            <!-- Play/Pause Button -->
-                            <Border Width="36" Height="36" Background="#1DB954" CornerRadius="18"
+                            <!-- CANVAS SPEC: Play/Pause Button (28x28px, NO glow) -->
+                            <Border Width="28" Height="28" Background="#1DB954" CornerRadius="14"
                                     Cursor="Hand" MouseLeftButtonDown="OnTogglePlayPause"
                                     Margin="0,0,6,0">
                                 <Border.Effect>
-                                    <DropShadowEffect Color="#1DB954" BlurRadius="12" Opacity="0.4" ShadowDepth="2"/>
+                                    <DropShadowEffect Color="#000000" BlurRadius="8" Opacity="0.4" ShadowDepth="2"/>
                                 </Border.Effect>
-                                <Path x:Name="PlayPauseIcon" Fill="White" Stretch="Uniform" Width="15" Height="15"
+                                <Path x:Name="PlayPauseIcon" Fill="White" Stretch="Uniform" Width="12" Height="12"
                                       HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <Path.Style>
                                         <Style TargetType="Path">
@@ -509,14 +512,14 @@
                                 </Path>
                             </Border>
 
-                            <!-- Next Button -->
-                            <Border Width="30" Height="30" Background="#1A1A1A" CornerRadius="15"
+                            <!-- CANVAS SPEC: Next Button (28x28px) -->
+                            <Border Width="28" Height="28" Background="#1A1A1A" CornerRadius="14"
                                     Cursor="Hand" MouseLeftButtonDown="OnSkipNext"
                                     Opacity="0.85">
                                 <Border.Effect>
                                     <DropShadowEffect Color="#000000" BlurRadius="8" Opacity="0.3" ShadowDepth="1"/>
                                 </Border.Effect>
-                                <Path Fill="#CCFFFFFF" Stretch="Uniform" Width="13" Height="13"
+                                <Path Fill="#CCFFFFFF" Stretch="Uniform" Width="12" Height="12"
                                       Data="M16,18H18V6H16M6,18L14.5,12L6,6V18Z"
                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             </Border>

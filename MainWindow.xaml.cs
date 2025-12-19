@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using NI.Core;
 using NI.Services;
 using NI.Views;
 using NI.Views.Controls;
@@ -14,13 +15,16 @@ namespace NI
     {
         private DesktopVisibilityService? _visibilityService;
         private IntPtr _hwnd;
-        private ControlCenterPanel? _currentPanel;
+        private ControlCenterPanel? _controlPanel;
+
+        // TopBarStateController integration
+        private TopBarStateController _stateController = TopBarStateController.Instance;
 
         public MainWindow()
         {
             // Use software rendering to ensure visibility in screen recordings
             RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
-            
+
             InitializeComponent();
             Loaded += OnLoaded;
             Closing += OnClosing;
@@ -29,20 +33,34 @@ namespace NI
 
         private void OnMainWindowKeyDown(object sender, KeyEventArgs e)
         {
-            // REMOVED: System Info and AI Assistant keyboard shortcuts (features disabled for stability)
+            // ESC key closes control panel and returns to Idle
+            if (e.Key == Key.Escape && _controlPanel != null && _controlPanel.Visibility == Visibility.Visible)
+            {
+                System.Diagnostics.Debug.WriteLine("[CRITICAL] ESC pressed -> Instant close");
+                ClosePanel();
+                e.Handled = true;
+            }
         }
 
 
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
             _hwnd = new WindowInteropHelper(this).Handle;
-            
+
             // Position at top center
             PositionWindow();
-            
+
             // Make window click-through for areas outside the island
             SetWindowExStyle();
-            
+
+            // CRITICAL: Preload Control Panel at startup (INSTANT response on click)
+            System.Diagnostics.Debug.WriteLine("[CRITICAL] Preloading Control Panel...");
+            _controlPanel = new ControlCenterPanel();
+            _controlPanel.Opacity = 0; // Hidden initially
+            _controlPanel.Visibility = Visibility.Collapsed;
+            OverlayLayer.Children.Add(_controlPanel);
+            System.Diagnostics.Debug.WriteLine("[CRITICAL] Control Panel preloaded (ready for instant open)");
+
             // Start desktop visibility monitoring
             _visibilityService = new DesktopVisibilityService(this);
             _visibilityService.VisibilityChanged += OnVisibilityChanged;
@@ -84,7 +102,8 @@ namespace NI
         {
             if (panelType == PanelType.ControlCenter)
             {
-                if (_currentPanel != null)
+                // CRITICAL: Toggle panel (instant response)
+                if (_controlPanel != null && _controlPanel.Visibility == Visibility.Visible)
                 {
                     ClosePanel();
                 }
@@ -101,39 +120,54 @@ namespace NI
 
         private void OpenControlCenter()
         {
+            if (_controlPanel == null) return;
+
+            // CRITICAL: UI update FIRST (instant response <100ms)
+            System.Diagnostics.Debug.WriteLine("[CRITICAL] OpenControlCenter -> INSTANT show");
+
+            // 1. Set state immediately
+            _stateController.SetMode(TopBarMode.ControlPanel);
+
+            // 2. Show UI instantly (just visibility toggle)
             Island.IsHitTestVisible = false;
             ClickAwayBackdrop.Visibility = Visibility.Visible;
-
-            _currentPanel = new ControlCenterPanel();
-
-            OverlayLayer.Children.Clear();
-            OverlayLayer.Children.Add(_currentPanel);
             OverlayLayer.Visibility = Visibility.Visible;
             OverlayLayer.IsHitTestVisible = true;
+
+            // 3. Animate panel in (already preloaded)
+            _controlPanel.Opacity = 1;
+            _controlPanel.Visibility = Visibility.Visible;
+            _controlPanel.AnimateIn();
+
+            System.Diagnostics.Debug.WriteLine("[CRITICAL] Control Panel shown (instant)");
         }
 
         private void ClosePanel()
         {
-            if (_currentPanel == null) return;
+            if (_controlPanel == null || _controlPanel.Visibility != Visibility.Visible) return;
+
+            System.Diagnostics.Debug.WriteLine("[CRITICAL] ClosePanel -> INSTANT hide");
 
             // Stop any Bluetooth discovery when closing
-            _currentPanel.StopAllScanning();
+            _controlPanel.StopAllScanning();
 
-            _currentPanel.AnimateOut(() =>
+            // CRITICAL: Animate out, then hide (fast)
+            _controlPanel.AnimateOut(() =>
             {
                 Dispatcher.Invoke(() =>
                 {
-                    // Cleanup to free memory
-                    OverlayLayer.Children.Clear();
+                    // Hide UI (don't destroy - keep preloaded)
+                    _controlPanel.Visibility = Visibility.Collapsed;
+                    _controlPanel.Opacity = 0;
                     OverlayLayer.Visibility = Visibility.Collapsed;
                     OverlayLayer.IsHitTestVisible = false;
                     ClickAwayBackdrop.Visibility = Visibility.Collapsed;
-                    
-                    // Dispose and null out panel
-                    _currentPanel?.Dispose();
-                    _currentPanel = null;
 
                     Island.IsHitTestVisible = true;
+
+                    // Return to Idle
+                    System.Diagnostics.Debug.WriteLine("[CRITICAL] ClosePanel -> ReturnToIdle()");
+                    _stateController.ReturnToIdle();
                 });
             });
         }
@@ -165,7 +199,7 @@ namespace NI
                 if (Visibility == Visibility.Visible)
                 {
                     // Close panel first if open
-                    if (_currentPanel != null)
+                    if (_controlPanel != null && _controlPanel.Visibility == Visibility.Visible)
                     {
                         ClosePanel();
                     }

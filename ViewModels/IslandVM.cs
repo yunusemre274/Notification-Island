@@ -20,7 +20,8 @@ namespace NI.ViewModels
         #region Phase 0: Timers Removed
 
         // PHASE 0 CLEANUP: All timers removed except Spotify progress timer (in MediaSessionService)
-        // Updates now driven by events only
+        // PHASE 1: Clock timer added (ONLY for clock updates, no other logic)
+        private DispatcherTimer? _clockTimer;
         private bool _isVisible = true;
 
         #endregion
@@ -32,6 +33,43 @@ namespace NI.ViewModels
         {
             get => _clockText;
             private set { if (_clockText != value) { _clockText = value; OnPropertyChanged(); } }
+        }
+
+        #endregion
+
+        #region Weather (CRITICAL: Must always have icon)
+
+        private string _weatherTemp = "22°";
+        public string WeatherTemp
+        {
+            get => _weatherTemp;
+            private set { if (_weatherTemp != value) { _weatherTemp = value; OnPropertyChanged(); } }
+        }
+
+        private string _weatherIcon = "☀️"; // Default: Sun
+        public string WeatherIcon
+        {
+            get => _weatherIcon;
+            private set { if (_weatherIcon != value) { _weatherIcon = value; OnPropertyChanged(); } }
+        }
+
+        /// <summary>
+        /// CRITICAL: Set weather icon based on condition
+        /// Clear → ☀️ | Cloudy → ☁️ | Rain → 🌧️ | Snow → ❄️ | Storm → ⛈️
+        /// </summary>
+        private void UpdateWeatherIcon(string condition)
+        {
+            WeatherIcon = condition.ToLower() switch
+            {
+                var c when c.Contains("clear") || c.Contains("sunny") => "☀️",
+                var c when c.Contains("cloud") || c.Contains("overcast") => "☁️",
+                var c when c.Contains("rain") || c.Contains("drizzle") => "🌧️",
+                var c when c.Contains("snow") || c.Contains("sleet") => "❄️",
+                var c when c.Contains("storm") || c.Contains("thunder") => "⛈️",
+                var c when c.Contains("fog") || c.Contains("mist") => "🌫️",
+                var c when c.Contains("wind") => "💨",
+                _ => "☀️" // Default
+            };
         }
 
         #endregion
@@ -299,7 +337,6 @@ namespace NI.ViewModels
 
         public event EventHandler? NotificationArrived;
         public event EventHandler? SmartEventArrived;
-        public event EventHandler? SpotifyChanged;
         public event EventHandler? HeadphoneBannerArrived;
         public event EventHandler? ActiveWindowChanged;
 
@@ -312,6 +349,18 @@ namespace NI.ViewModels
 
         public void Start()
         {
+            // PHASE 1: Clock timer (ONLY updates clock, no other logic)
+            _clockTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(1) // Update every second for smooth clock
+            };
+            _clockTimer.Tick += (s, e) =>
+            {
+                // ONLY update clock text - no other logic allowed here
+                ClockText = DateTime.Now.ToString("HH:mm");
+            };
+            _clockTimer.Start();
+
             // System notification service (event-driven, no polling)
             _notificationService = new NotificationService();
             _notificationService.NotificationReceived += OnSystemNotification;
@@ -401,7 +450,12 @@ namespace NI.ViewModels
 
         public void Stop()
         {
-            // PHASE 0: Timers removed, only cleanup services
+            // PHASE 1: Stop clock timer
+            if (_clockTimer != null)
+            {
+                _clockTimer.Stop();
+                _clockTimer = null;
+            }
 
             // Stop all services
             _notificationService?.Stop();
@@ -498,7 +552,18 @@ namespace NI.ViewModels
         {
             // RULE: IsSpotifyActive = true ONLY if track title AND artist exist
             bool hasTrackInfo = !string.IsNullOrEmpty(SpotifySong) && !string.IsNullOrEmpty(SpotifyArtist);
+            var oldState = IsSpotifyActive;
             IsSpotifyActive = hasTrackInfo;
+
+            // PHASE 3: Log Spotify state changes for debugging
+            if (oldState != IsSpotifyActive)
+            {
+                System.Diagnostics.Debug.WriteLine($"[PHASE3] Spotify state changed: {oldState} → {IsSpotifyActive}");
+                if (!IsSpotifyActive)
+                {
+                    System.Diagnostics.Debug.WriteLine("[PHASE3] Spotify stopped/closed → Will return to Idle via IslandView.UpdateMode()");
+                }
+            }
 
             if (IsSpotifyActive)
             {
@@ -507,7 +572,7 @@ namespace NI.ViewModels
             }
             else
             {
-                // Show active window when Spotify is not active
+                // PHASE 3: When Spotify stops, show active window (Idle state)
                 UpdateActiveWindow();
             }
         }
@@ -546,35 +611,94 @@ namespace NI.ViewModels
         private NI.Services.AI.OllamaClient? _ollamaClient;
 
         /// <summary>
-        /// PHASE 4: Get answer from local Ollama
+        /// CRITICAL: Get answer from local Ollama with PROPER verification
+        /// Fully async, no UI thread blocking
         /// </summary>
         public async Task<string> GetOllamaAnswerAsync(string question)
         {
             try
             {
-                // Initialize Ollama client if needed
+                System.Diagnostics.Debug.WriteLine($"[CRITICAL] GetOllamaAnswerAsync called: {question}");
+
+                // CRITICAL: Initialize and verify Ollama on first use
                 if (_ollamaClient == null)
                 {
                     _ollamaClient = new NI.Services.AI.OllamaClient();
 
-                    // Check if Ollama is available
-                    var isAvailable = await _ollamaClient.IsAvailableAsync();
-                    if (!isAvailable)
+                    // CRITICAL: Verify Ollama installation and status
+                    var (installed, running, message) = await _ollamaClient.VerifyOllamaAsync();
+
+                    if (!installed)
                     {
-                        return "❌ Ollama is not running.\n\nPlease start Ollama on your computer:\n1. Install Ollama from ollama.ai\n2. Run 'ollama serve' in terminal\n3. Try your search again";
+                        System.Diagnostics.Debug.WriteLine("[CRITICAL] Ollama not installed");
+                        return "❌ Ollama Not Installed\n\n" +
+                               "Install Ollama:\n" +
+                               "1. Visit ollama.com\n" +
+                               "2. Download and install\n" +
+                               "3. Run 'ollama serve'\n" +
+                               "4. Pull a model: 'ollama pull llama3.2'";
                     }
+
+                    if (!running)
+                    {
+                        System.Diagnostics.Debug.WriteLine("[CRITICAL] Ollama installed but not running");
+                        return "❌ Ollama Not Running\n\n" +
+                               "Ollama is installed but not running.\n\n" +
+                               "Start Ollama:\n" +
+                               "• Run 'ollama serve' in terminal\n" +
+                               "• Then try your search again";
+                    }
+
+                    System.Diagnostics.Debug.WriteLine("[CRITICAL] Ollama verified and ready");
                 }
 
-                // Get answer from Ollama
+                // CRITICAL: Get answer from Ollama (async, no blocking)
                 var answer = await _ollamaClient.GenerateAsync(question);
 
-                return string.IsNullOrWhiteSpace(answer)
-                    ? "Sorry, I couldn't generate an answer. Please try again."
-                    : answer;
+                if (string.IsNullOrWhiteSpace(answer))
+                {
+                    System.Diagnostics.Debug.WriteLine("[CRITICAL] Ollama returned empty response");
+                    return "⚠️ No Response Generated\n\nPlease try rephrasing your question.";
+                }
+
+                System.Diagnostics.Debug.WriteLine($"[CRITICAL] Ollama answer received ({answer.Length} chars)");
+                return answer;
+            }
+            catch (NI.Services.AI.OllamaException ex)
+            {
+                // CRITICAL: Specific Ollama errors with friendly messages
+                System.Diagnostics.Debug.WriteLine($"[CRITICAL] OllamaException: {ex.StatusCode} - {ex.Message}");
+
+                return ex.StatusCode switch
+                {
+                    System.Net.HttpStatusCode.NotFound =>
+                        "❌ Model Not Found\n\n" +
+                        "The model is not available.\n\n" +
+                        "Pull the model:\n" +
+                        "ollama pull llama3.2",
+
+                    System.Net.HttpStatusCode.ServiceUnavailable =>
+                        "❌ Cannot Connect\n\n" +
+                        "Ollama service unavailable.\n\n" +
+                        "Make sure Ollama is running:\n" +
+                        "ollama serve",
+
+                    System.Net.HttpStatusCode.RequestTimeout =>
+                        "⏱️ Request Timed Out\n\n" +
+                        "The request took too long.\n\n" +
+                        "Try:\n" +
+                        "• A shorter question\n" +
+                        "• Wait for model to load",
+
+                    _ =>
+                        $"❌ Ollama Error\n\nStatus: {ex.StatusCode}\n{ex.Message}"
+                };
             }
             catch (Exception ex)
             {
-                return $"❌ Error: {ex.Message}\n\nMake sure Ollama is running (ollama serve)";
+                // CRITICAL: Generic error fallback
+                System.Diagnostics.Debug.WriteLine($"[CRITICAL] Unexpected error: {ex.Message}");
+                return $"❌ Unexpected Error\n\n{ex.Message}\n\nEnsure Ollama is running:\nollama serve";
             }
         }
 

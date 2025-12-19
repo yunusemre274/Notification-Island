@@ -6,6 +6,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
+using NI.Core;
 using NI.Services;
 using NI.Services.AI;
 using NI.ViewModels;
@@ -16,62 +17,27 @@ namespace NI.Views
 {
     public enum PanelType { None, Wifi, Sound, ControlCenter }
 
-    /// <summary>
-    /// KISS Architecture: Single Island Mode (ONLY ONE ACTIVE AT A TIME)
-    /// Priority: ControlPanel > Notification > SpotifyExpanded > SpotifyPill > Idle
-    /// </summary>
-    public enum IslandMode
-    {
-        Idle,              // Default: Time + Search/ActiveWindow + Status
-        ControlPanel,      // Control panel expanded (highest priority when open)
-        Notification,      // System notification (app logo + "1 new notification")
-        SpotifyPill,       // Spotify compact: Logo + Track info
-        SpotifyExpanded,   // Spotify full: Album art + Controls + Timeline
-        SearchAnswer       // Ollama answer card (large black card with response)
-    }
-
     public partial class IslandView : UserControl, INotifyPropertyChanged
     {
         private IslandVM _vm = null!;
 
-        // KISS: SINGLE MODE PROPERTY - Only one state active at any time
-        private IslandMode _currentMode = IslandMode.Idle;
-        public IslandMode CurrentMode
+        // PHASE 1: Use TopBarStateController as SINGLE SOURCE OF TRUTH
+        private TopBarStateController _stateController = TopBarStateController.Instance;
+
+        // KISS: SINGLE MODE PROPERTY - Delegates to TopBarStateController
+        public TopBarMode CurrentMode
         {
-            get => _currentMode;
-            private set
-            {
-                if (_currentMode != value)
-                {
-                    var oldMode = _currentMode;
-                    _currentMode = value;
-
-                    // PHASE 0: Log state transitions for debugging
-                    System.Diagnostics.Debug.WriteLine($"[PHASE0] Mode Transition: {oldMode} → {_currentMode}");
-
-                    OnPropertyChanged(nameof(CurrentMode));
-
-                    // Update all mode-specific properties for XAML binding
-                    OnPropertyChanged(nameof(IsIdle));
-                    OnPropertyChanged(nameof(IsControlPanel));
-                    OnPropertyChanged(nameof(IsNotification));
-                    OnPropertyChanged(nameof(IsSpotifyPill));
-                    OnPropertyChanged(nameof(IsSpotifyExpanded));
-                    OnPropertyChanged(nameof(IsSearchAnswer));
-
-                    // Animate size when mode changes
-                    AnimateToCurrentMode();
-                }
-            }
+            get => _stateController.CurrentMode;
+            private set => _stateController.SetMode(value);
         }
 
-        // XAML Binding Properties - Each returns true for ONLY ONE mode
-        public bool IsIdle => CurrentMode == IslandMode.Idle;
-        public bool IsControlPanel => CurrentMode == IslandMode.ControlPanel;
-        public bool IsNotification => CurrentMode == IslandMode.Notification;
-        public bool IsSpotifyPill => CurrentMode == IslandMode.SpotifyPill;
-        public bool IsSpotifyExpanded => CurrentMode == IslandMode.SpotifyExpanded;
-        public bool IsSearchAnswer => CurrentMode == IslandMode.SearchAnswer;
+        // XAML Binding Properties - Delegates to TopBarStateController
+        public bool IsIdle => _stateController.IsIdle;
+        public bool IsControlPanel => _stateController.IsControlPanel;
+        public bool IsNotification => _stateController.IsNotification;
+        public bool IsSpotifyPill => _stateController.IsSpotifyPill;
+        public bool IsSpotifyExpanded => _stateController.IsSpotifyExpanded;
+        public bool IsSearchAnswer => _stateController.IsSearchAnswer;
 
         // Panel state
         private PanelType _currentPanel = PanelType.None;
@@ -94,11 +60,11 @@ namespace NI.Views
         // Animation durations - FASTER for snappy HyperOS feel
         private static readonly Duration TransitionDuration = TimeSpan.FromMilliseconds(250);
 
-        // Sizes
-        private const double DefaultWidth = 350;
-        private const double DefaultHeight = 36;
-        private const double MusicCardWidth = 320;
-        private const double MusicCardHeight = 90;
+        // CANVAS SPEC: EXACT pixel dimensions
+        private const double DefaultWidth = 420;   // Idle pill width
+        private const double DefaultHeight = 48;   // Idle pill height
+        private const double MusicCardWidth = 380;  // Spotify expanded width
+        private const double MusicCardHeight = 140; // Spotify expanded height
 
         public IslandView()
         {
@@ -106,12 +72,15 @@ namespace NI.Views
             _vm = (IslandVM)DataContext;
             _vm.NotificationArrived += OnNotificationArrived;
             _vm.SmartEventArrived += OnSmartEventArrived;
-            _vm.SpotifyChanged += OnSpotifyChanged;
             _vm.HeadphoneBannerArrived += OnHeadphoneBannerArrived;
             _vm.ActiveWindowChanged += OnActiveWindowChanged;
 
             // CRITICAL: Subscribe to IsSpotifyActive changes for automatic state transition
             _vm.PropertyChanged += OnViewModelPropertyChanged;
+
+            // PHASE 1: Subscribe to TopBarStateController mode changes
+            _stateController.ModeChanged += OnStateControllerModeChanged;
+            _stateController.PropertyChanged += OnStateControllerPropertyChanged;
 
             _vm.Start();
 
@@ -127,18 +96,43 @@ namespace NI.Views
         /// </summary>
         private void OnUnloaded(object sender, RoutedEventArgs e)
         {
-            // PHASE 0: Timer cleanup removed
+            // PHASE 1: Unsubscribe from TopBarStateController
+            if (_stateController != null)
+            {
+                _stateController.ModeChanged -= OnStateControllerModeChanged;
+                _stateController.PropertyChanged -= OnStateControllerPropertyChanged;
+            }
 
             if (_vm != null)
             {
                 _vm.NotificationArrived -= OnNotificationArrived;
                 _vm.SmartEventArrived -= OnSmartEventArrived;
-                _vm.SpotifyChanged -= OnSpotifyChanged;
                 _vm.HeadphoneBannerArrived -= OnHeadphoneBannerArrived;
                 _vm.ActiveWindowChanged -= OnActiveWindowChanged;
                 _vm.PropertyChanged -= OnViewModelPropertyChanged;
             }
             Unloaded -= OnUnloaded;
+        }
+
+        /// <summary>
+        /// PHASE 1: Handle state controller mode changes
+        /// </summary>
+        private void OnStateControllerModeChanged(object? sender, TopBarMode newMode)
+        {
+            // Mode changed - animate to new mode
+            AnimateToCurrentMode();
+        }
+
+        /// <summary>
+        /// PHASE 1: Handle state controller property changes (for XAML bindings)
+        /// </summary>
+        private void OnStateControllerPropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            // Forward property changes to our own PropertyChanged event so XAML bindings update
+            if (e.PropertyName != null)
+            {
+                OnPropertyChanged(e.PropertyName);
+            }
         }
 
         /// <summary>
@@ -151,14 +145,14 @@ namespace NI.Views
             // Priority 1: Control Panel (user opened it)
             if (_currentPanel != PanelType.None)
             {
-                CurrentMode = IslandMode.ControlPanel;
+                _stateController.SetMode(TopBarMode.ControlPanel);
                 return;
             }
 
             // Priority 2: Search Answer (user is viewing Ollama response)
             // Note: SearchAnswer is set directly in OnSearchKeyDown, not through UpdateMode
             // This check ensures we don't override it unless we explicitly call CloseSearchAnswer
-            if (CurrentMode == IslandMode.SearchAnswer)
+            if (CurrentMode == TopBarMode.SearchAnswer)
             {
                 return; // Stay in SearchAnswer mode until explicitly closed
             }
@@ -166,7 +160,7 @@ namespace NI.Views
             // Priority 3: Notification (system notification active)
             if (_vm.HasNotification)
             {
-                CurrentMode = IslandMode.Notification;
+                _stateController.SetMode(TopBarMode.Notification);
                 return;
             }
 
@@ -176,17 +170,17 @@ namespace NI.Views
                 // User clicked to expand
                 if (_isSpotifyExpanded)
                 {
-                    CurrentMode = IslandMode.SpotifyExpanded;
+                    _stateController.SetMode(TopBarMode.SpotifyExpanded);
                     return;
                 }
 
                 // Default: show pill when playing
-                CurrentMode = IslandMode.SpotifyPill;
+                _stateController.SetMode(TopBarMode.SpotifyPill);
                 return;
             }
 
-            // Default: Idle (Time + Search + Weather)
-            CurrentMode = IslandMode.Idle;
+            // PHASE 1: Default state is ALWAYS Idle - explicitly return to Idle
+            _stateController.ReturnToIdle();
         }
 
         // Track if user expanded Spotify manually
@@ -200,8 +194,17 @@ namespace NI.Views
         private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
             // VM state changed, recalculate mode
-            if (e.PropertyName == nameof(_vm.IsSpotifyActive) ||
-                e.PropertyName == nameof(_vm.HasNotification))
+            if (e.PropertyName == nameof(_vm.IsSpotifyActive))
+            {
+                // PHASE 1: When Spotify stops, reset expansion state and return to Idle
+                if (!_vm.IsSpotifyActive)
+                {
+                    _isSpotifyExpanded = false;
+                    System.Diagnostics.Debug.WriteLine("[PHASE1] Spotify stopped -> Reset expansion state + ReturnToIdle via UpdateMode()");
+                }
+                UpdateMode();
+            }
+            else if (e.PropertyName == nameof(_vm.HasNotification))
             {
                 UpdateMode();
             }
@@ -240,15 +243,19 @@ namespace NI.Views
         private void OnLeftClick(object sender, MouseButtonEventArgs e)
         {
             // KISS: Toggle Spotify expansion when Spotify is active
-            if (CurrentMode == IslandMode.SpotifyPill || CurrentMode == IslandMode.SpotifyExpanded)
+            if (CurrentMode == TopBarMode.SpotifyPill || CurrentMode == TopBarMode.SpotifyExpanded)
             {
                 _isSpotifyExpanded = !_isSpotifyExpanded;
                 UpdateMode();
                 e.Handled = true;
             }
-            else if (CurrentMode == IslandMode.Idle)
+            else if (CurrentMode == TopBarMode.Idle)
             {
+                // PHASE 2: Clicking Idle top bar opens Control Panel
+                System.Diagnostics.Debug.WriteLine("[PHASE2] Idle top bar clicked -> Opening Control Panel");
                 PlayPulse();
+                PanelRequested?.Invoke(this, PanelType.ControlCenter);
+                e.Handled = true;
             }
         }
 
@@ -279,7 +286,7 @@ namespace NI.Views
                 // Show SearchAnswer mode with "Thinking..." message
                 SearchQuestionText.Text = question;
                 SearchAnswerText.Text = "Thinking...";
-                CurrentMode = IslandMode.SearchAnswer;
+                _stateController.SetMode(TopBarMode.SearchAnswer);
 
                 // Call Ollama to get answer
                 var answer = await _vm.GetOllamaAnswerAsync(question);
@@ -290,7 +297,7 @@ namespace NI.Views
             else if (e.Key == Key.Escape)
             {
                 // ESC closes search answer if open, otherwise clears search box
-                if (CurrentMode == IslandMode.SearchAnswer)
+                if (CurrentMode == TopBarMode.SearchAnswer)
                 {
                     CloseSearchAnswer();
                 }
@@ -311,12 +318,18 @@ namespace NI.Views
             CloseSearchAnswer();
         }
 
+        /// <summary>
+        /// PHASE 1 & 4: Close search answer - EXPLICIT RETURN TO IDLE
+        /// </summary>
         private void CloseSearchAnswer()
         {
             SearchTextBox.Clear();
             SearchQuestionText.Text = "";
             SearchAnswerText.Text = "";
-            UpdateMode(); // Will return to Idle or other active mode
+
+            // PHASE 1 & 4 REQUIREMENT: Explicitly return to Idle when LLM answer is dismissed
+            System.Diagnostics.Debug.WriteLine("[PHASE1/4] CloseSearchAnswer -> Explicit ReturnToIdle()");
+            _stateController.ReturnToIdle();
         }
 
         private void OnCenterClick(object sender, MouseButtonEventArgs e)
@@ -481,11 +494,6 @@ namespace NI.Views
             UpdateMode();
         }
 
-        private void OnSpotifyChanged(object? sender, EventArgs e)
-        {
-            // Spotify state changed - recalculate mode
-            UpdateMode();
-        }
 
         private void OnHeadphoneBannerArrived(object? sender, EventArgs e)
         {
@@ -506,8 +514,8 @@ namespace NI.Views
         #region Animations - Simple Mode Transitions
 
         /// <summary>
-        /// KISS: Animates to current mode size (called automatically when CurrentMode changes)
-        /// Each mode has fixed dimensions - no complex state combinations
+        /// PIXEL-PERFECT: Animates to EXACT Canvas design dimensions
+        /// ALL values are from Canvas specifications - DO NOT MODIFY
         /// </summary>
         private void AnimateToCurrentMode()
         {
@@ -515,52 +523,53 @@ namespace NI.Views
 
             switch (CurrentMode)
             {
-                case IslandMode.Idle:
-                    // Default pill: Time + Search + Status
-                    targetWidth = 350;
-                    targetHeight = 36;
-                    targetCornerRadius = 18;
-                    break;
-
-                case IslandMode.ControlPanel:
-                    // Control panel stays as pill, panel appears below
-                    targetWidth = 350;
-                    targetHeight = 36;
-                    targetCornerRadius = 18;
-                    break;
-
-                case IslandMode.Notification:
-                    // Notification pill: App logo + text
-                    targetWidth = 320;
-                    targetHeight = 36;
-                    targetCornerRadius = 18;
-                    break;
-
-                case IslandMode.SpotifyPill:
-                    // Spotify compact: Logo + Track info
-                    targetWidth = 300;
-                    targetHeight = 74;
-                    targetCornerRadius = 20;
-                    break;
-
-                case IslandMode.SpotifyExpanded:
-                    // Spotify full card: Album + Controls + Timeline
-                    targetWidth = 380;
-                    targetHeight = 110;
+                case TopBarMode.Idle:
+                    // CANVAS SPEC: 420x48px, radius 24px
+                    targetWidth = 420;
+                    targetHeight = 48;
                     targetCornerRadius = 24;
                     break;
 
-                case IslandMode.SearchAnswer:
-                    // Ollama answer card (large black card)
-                    targetWidth = 450;
-                    targetHeight = 200;
-                    targetCornerRadius = 26;
+                case TopBarMode.ControlPanel:
+                    // CANVAS SPEC: Pill stays 420x48px, radius 24px
+                    targetWidth = 420;
+                    targetHeight = 48;
+                    targetCornerRadius = 24;
+                    break;
+
+                case TopBarMode.Notification:
+                    // CANVAS SPEC: Same as Idle (420x48px, radius 24px)
+                    targetWidth = 420;
+                    targetHeight = 48;
+                    targetCornerRadius = 24;
+                    break;
+
+                case TopBarMode.SpotifyPill:
+                    // CANVAS SPEC: 460x48px, radius 24px
+                    targetWidth = 460;
+                    targetHeight = 48;
+                    targetCornerRadius = 24;
+                    break;
+
+                case TopBarMode.SpotifyExpanded:
+                    // CANVAS SPEC: 380x140px, radius 28px
+                    targetWidth = 380;
+                    targetHeight = 140;
+                    targetCornerRadius = 28;
+                    break;
+
+                case TopBarMode.SearchAnswer:
+                    // CANVAS SPEC: 420x220px (max), radius 24px
+                    targetWidth = 420;
+                    targetHeight = 220;
+                    targetCornerRadius = 24;
                     break;
 
                 default:
-                    targetWidth = DefaultWidth;
-                    targetHeight = DefaultHeight;
-                    targetCornerRadius = 18;
+                    // CANVAS SPEC: Default to Idle
+                    targetWidth = 420;
+                    targetHeight = 48;
+                    targetCornerRadius = 24;
                     break;
             }
 
