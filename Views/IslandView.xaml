@@ -180,7 +180,7 @@
         
         <!-- PHASE 3: Premium iOS-style progress bar (NO GLOW - pure black) -->
         <Style x:Key="SpotifyProgressBar" TargetType="ProgressBar">
-            <Setter Property="Height" Value="4"/>
+            <Setter Property="Height" Value="3"/>
             <Setter Property="Background" Value="#20FFFFFF"/>
             <Setter Property="Foreground" Value="{StaticResource SpotifyGreen}"/>
             <Setter Property="BorderThickness" Value="0"/>

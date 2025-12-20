@@ -4,25 +4,25 @@
 
     <UserControl.Resources>
         <!-- HyperOS Colors -->
-        <Color x:Key="HyperBlue">#4C8DFF</Color>
+        <Color x:Key="HyperBlue">#3A7BFF</Color>
         <Color x:Key="HyperGreen">#34C759</Color>
-        <Color x:Key="HyperOrange">#FF9500</Color>
+        <Color x:Key="HyperOrange">#FF8C1A</Color>
         <Color x:Key="HyperPurple">#AF52DE</Color>
-        <Color x:Key="TileBackground">#CC202020</Color>
-        <Color x:Key="TileBackgroundActive">#CC4C8DFF</Color>
+        <Color x:Key="TileBackground">#2C2C2E</Color>
+        <Color x:Key="TileBackgroundActive">#CC3A7BFF</Color>
         
         <SolidColorBrush x:Key="HyperBlueBrush" Color="{StaticResource HyperBlue}"/>
         <SolidColorBrush x:Key="HyperGreenBrush" Color="{StaticResource HyperGreen}"/>
         <SolidColorBrush x:Key="TileBgBrush" Color="{StaticResource TileBackground}"/>
         <SolidColorBrush x:Key="TileActiveBrush" Color="{StaticResource TileBackgroundActive}"/>
-        <SolidColorBrush x:Key="SliderTrackBrush" Color="#4A4A4A"/>
+        <SolidColorBrush x:Key="SliderTrackBrush" Color="#3A3A3C"/>
         <SolidColorBrush x:Key="TextDimBrush" Color="#888888"/>
         
         <!-- Connectivity Tile Style (Large) -->
         <Style x:Key="ConnectivityTile" TargetType="Border">
-            <Setter Property="Width" Value="88"/>
-            <Setter Property="Height" Value="88"/>
-            <Setter Property="CornerRadius" Value="22"/>
+            <Setter Property="Width" Value="132"/>
+            <Setter Property="Height" Value="96"/>
+            <Setter Property="CornerRadius" Value="24"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
             <Setter Property="RenderTransform">
@@ -34,9 +34,9 @@
         
         <!-- Small Toggle Tile Style -->
         <Style x:Key="SmallTile" TargetType="Border">
-            <Setter Property="Width" Value="56"/>
-            <Setter Property="Height" Value="56"/>
-            <Setter Property="CornerRadius" Value="18"/>
+            <Setter Property="Width" Value="44"/>
+            <Setter Property="Height" Value="44"/>
+            <Setter Property="CornerRadius" Value="22"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
             <Setter Property="RenderTransform">
@@ -187,10 +187,10 @@
     </UserControl.Resources>
 
     <!-- Main Panel Container -->
-    <Border x:Name="MainPanel" CornerRadius="26" Width="400" Height="480"
+    <Border x:Name="MainPanel" CornerRadius="32" Width="360" Height="520"
             RenderTransformOrigin="0.5,0">
         <Border.Background>
-            <SolidColorBrush Color="#202020" Opacity="0.92"/>
+            <SolidColorBrush Color="#1E1E1E"/>
         </Border.Background>
         <Border.RenderTransform>
             <TransformGroup>
@@ -199,303 +199,291 @@
             </TransformGroup>
         </Border.RenderTransform>
         <Border.Effect>
-            <DropShadowEffect BlurRadius="30" ShadowDepth="8" Opacity="0.35" Color="Black"/>
+            <DropShadowEffect BlurRadius="45" ShadowDepth="18" Opacity="0.45" Color="Black"/>
         </Border.Effect>
 
-        <Grid Margin="16,18,16,16">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/> <!-- Connectivity 2x2 -->
-                <RowDefinition Height="Auto"/> <!-- Small Toggles Row -->
-                <RowDefinition Height="Auto"/> <!-- Brightness Slider -->
-                <RowDefinition Height="Auto"/> <!-- Volume Slider -->
-                <RowDefinition Height="Auto"/> <!-- Output Device -->
-                <RowDefinition Height="*"/>    <!-- Spacer -->
-                <RowDefinition Height="Auto"/> <!-- Battery + Settings -->
-            </Grid.RowDefinitions>
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="18"/> <!-- Left volume bar -->
+                <ColumnDefinition Width="*"/>  <!-- Main content -->
+            </Grid.ColumnDefinitions>
 
-            <!-- SECTION 1: Connectivity Tile Cluster (2x2) -->
-            <Grid Grid.Row="0" HorizontalAlignment="Center" Margin="0,0,0,14">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="8"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
+            <!-- LEFT VERTICAL VOLUME BAR -->
+            <Border Grid.Column="0" CornerRadius="9" Margin="0,20,0,20" Background="#40808080">
+                <Grid>
+                    <!-- Volume fill (grows from bottom) -->
+                    <Border x:Name="VolumeFill" CornerRadius="9" VerticalAlignment="Bottom"
+                            Background="#00E5FF" Height="200"/>
+
+                    <!-- Volume icon -->
+                    <Image Source="{StaticResource VolumeIcon}" Width="12" Height="12"
+                           VerticalAlignment="Bottom" Margin="0,0,0,8"/>
+                </Grid>
+            </Border>
+
+            <!-- MAIN CONTENT AREA -->
+            <Grid Grid.Column="1" Margin="16,18,16,16">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="8"/>
-                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/> <!-- Top toggles -->
+                    <RowDefinition Height="Auto"/> <!-- Middle icon buttons -->
+                    <RowDefinition Height="Auto"/> <!-- System metrics -->
+                    <RowDefinition Height="*"/>    <!-- Spacer -->
+                    <RowDefinition Height="Auto"/> <!-- Audio slider -->
+                    <RowDefinition Height="Auto"/> <!-- Brightness slider -->
                 </Grid.RowDefinitions>
 
-                <!-- WiFi Tile -->
-                <Border x:Name="WifiTile" Grid.Row="0" Grid.Column="0" 
-                        Style="{StaticResource ConnectivityTile}"
-                        Background="{StaticResource TileActiveBrush}"
-                        MouseLeftButtonDown="OnWifiToggle"
-                        MouseEnter="OnTileMouseEnter" MouseLeave="OnTileMouseLeave">
-                    <Border.Effect>
-                        <DropShadowEffect x:Name="WifiGlow" Color="{StaticResource HyperBlue}" 
-                                          BlurRadius="15" ShadowDepth="0" Opacity="0.4"/>
-                    </Border.Effect>
-                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                        <Image Source="{StaticResource WifiIcon}" Width="28" Height="28" 
-                               HorizontalAlignment="Center" Margin="0,0,0,6"/>
-                        <TextBlock x:Name="WifiLabel" Text="Wi-Fi" Foreground="White" 
-                                   FontSize="12" FontWeight="Medium" HorizontalAlignment="Center"/>
-                        <TextBlock x:Name="WifiSubLabel" Text="Connected" Foreground="#AAFFFFFF" 
-                                   FontSize="9" HorizontalAlignment="Center" Margin="0,1,0,0"/>
-                    </StackPanel>
-                </Border>
-
-                <!-- Bluetooth Tile -->
-                <Border x:Name="BluetoothTile" Grid.Row="0" Grid.Column="2" 
-                        Style="{StaticResource ConnectivityTile}"
-                        Background="{StaticResource TileBgBrush}"
-                        MouseLeftButtonDown="OnBluetoothToggle"
-                        MouseEnter="OnTileMouseEnter" MouseLeave="OnTileMouseLeave">
-                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                        <Image Source="{StaticResource BluetoothIcon}" Width="28" Height="28" 
-                               HorizontalAlignment="Center" Margin="0,0,0,6" Opacity="0.7"/>
-                        <TextBlock x:Name="BluetoothLabel" Text="Bluetooth" Foreground="#AAFFFFFF" 
-                                   FontSize="12" FontWeight="Medium" HorizontalAlignment="Center"/>
-                        <TextBlock x:Name="BluetoothSubLabel" Text="Off" Foreground="#66FFFFFF" 
-                                   FontSize="9" HorizontalAlignment="Center" Margin="0,1,0,0"/>
-                    </StackPanel>
-                </Border>
-
-                <!-- Airplane Mode Tile -->
-                <Border x:Name="AirplaneTile" Grid.Row="2" Grid.Column="0" 
-                        Style="{StaticResource ConnectivityTile}"
-                        Background="{StaticResource TileBgBrush}"
-                        MouseLeftButtonDown="OnAirplaneToggle"
-                        MouseEnter="OnTileMouseEnter" MouseLeave="OnTileMouseLeave">
-                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                        <Image Source="{StaticResource AirplaneIcon}" Width="28" Height="28" 
-                               HorizontalAlignment="Center" Margin="0,0,0,6" Opacity="0.7"/>
-                        <TextBlock Text="Airplane" Foreground="#AAFFFFFF" 
-                                   FontSize="12" FontWeight="Medium" HorizontalAlignment="Center"/>
-                        <TextBlock Text="Off" Foreground="#66FFFFFF" 
-                                   FontSize="9" HorizontalAlignment="Center" Margin="0,1,0,0"/>
-                    </StackPanel>
-                </Border>
-
-                <!-- Hotspot Tile -->
-                <Border x:Name="HotspotTile" Grid.Row="2" Grid.Column="2" 
-                        Style="{StaticResource ConnectivityTile}"
-                        Background="{StaticResource TileBgBrush}"
-                        MouseLeftButtonDown="OnHotspotToggle"
-                        MouseEnter="OnTileMouseEnter" MouseLeave="OnTileMouseLeave">
-                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                        <Image Source="{StaticResource HotspotIcon}" Width="28" Height="28" 
-                               HorizontalAlignment="Center" Margin="0,0,0,6" Opacity="0.7"/>
-                        <TextBlock Text="Hotspot" Foreground="#AAFFFFFF" 
-                                   FontSize="12" FontWeight="Medium" HorizontalAlignment="Center"/>
-                        <TextBlock Text="Off" Foreground="#66FFFFFF" 
-                                   FontSize="9" HorizontalAlignment="Center" Margin="0,1,0,0"/>
-                    </StackPanel>
-                </Border>
-            </Grid>
-
-            <!-- SECTION 2: Small Toggle Tiles Row -->
-            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,18">
-                <!-- Night Light -->
-                <Border x:Name="NightLightTile" Style="{StaticResource SmallTile}"
-                        Background="{StaticResource TileBgBrush}" Margin="0,0,10,0"
-                        MouseLeftButtonDown="OnNightLightToggle"
-                        MouseEnter="OnTileMouseEnter" MouseLeave="OnTileMouseLeave">
-                    <Image Source="{StaticResource NightLightIcon}" Width="24" Height="24" Opacity="0.7"/>
-                </Border>
-
-                <!-- Focus / DND -->
-                <Border x:Name="FocusTile" Style="{StaticResource SmallTile}"
-                        Background="{StaticResource TileBgBrush}" Margin="0,0,10,0"
-                        MouseLeftButtonDown="OnFocusToggle"
-                        MouseEnter="OnTileMouseEnter" MouseLeave="OnTileMouseLeave">
-                    <Image Source="{StaticResource FocusIcon}" Width="24" Height="24" Opacity="0.7"/>
-                </Border>
-
-                <!-- Settings Quick Access -->
-                <Border x:Name="SettingsTile" Style="{StaticResource SmallTile}"
-                        Background="{StaticResource TileBgBrush}"
-                        MouseLeftButtonDown="OnSettingsClick"
-                        MouseEnter="OnTileMouseEnter" MouseLeave="OnTileMouseLeave">
-                    <Image Source="{StaticResource SettingsIcon}" Width="24" Height="24" Opacity="0.7"/>
-                </Border>
-            </StackPanel>
-
-            <!-- SECTION 3: Brightness Slider -->
-            <Border Grid.Row="2" Background="#40303030" CornerRadius="12" 
-                    Height="44" Margin="0,0,0,10">
-                <Grid Margin="14,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    
-                    <Image Source="{StaticResource BrightnessIcon}" Width="20" Height="20" 
-                           VerticalAlignment="Center" Margin="0,0,12,0"/>
-                    
-                    <Slider x:Name="BrightnessSlider" Grid.Column="1" 
-                            Value="75" Minimum="0" Maximum="100"
-                            VerticalAlignment="Center" Height="8"
-                            ValueChanged="OnBrightnessChanged"
-                            IsMoveToPointEnabled="True">
-                        <Slider.Template>
-                            <ControlTemplate TargetType="Slider">
-                                <Grid>
-                                    <Border Background="{StaticResource SliderTrackBrush}" 
-                                            CornerRadius="4" Height="8"/>
-                                    <Border x:Name="PART_SelectionRange" 
-                                            Background="{StaticResource HyperBlueBrush}" 
-                                            CornerRadius="4" Height="8" HorizontalAlignment="Left"/>
-                                    <Track x:Name="PART_Track">
-                                        <Track.Thumb>
-                                            <Thumb>
-                                                <Thumb.Template>
-                                                    <ControlTemplate TargetType="Thumb">
-                                                        <Ellipse Width="18" Height="18" Fill="White">
-                                                            <Ellipse.Effect>
-                                                                <DropShadowEffect BlurRadius="6" ShadowDepth="1" Opacity="0.3"/>
-                                                            </Ellipse.Effect>
-                                                        </Ellipse>
-                                                    </ControlTemplate>
-                                                </Thumb.Template>
-                                            </Thumb>
-                                        </Track.Thumb>
-                                    </Track>
-                                </Grid>
-                            </ControlTemplate>
-                        </Slider.Template>
-                    </Slider>
-                    
-                    <TextBlock x:Name="BrightnessText" Grid.Column="2" Text="75%" 
-                               Foreground="White" FontSize="13" FontWeight="Medium"
-                               VerticalAlignment="Center" Margin="12,0,0,0" Width="38"/>
-                </Grid>
-            </Border>
-
-            <!-- Volume Slider -->
-            <Border Grid.Row="3" Background="#40303030" CornerRadius="12" 
-                    Height="44" Margin="0,0,0,10">
-                <Grid Margin="14,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    
-                    <Image x:Name="VolumeIconImage" Source="{StaticResource VolumeIcon}" 
-                           Width="20" Height="20" VerticalAlignment="Center" Margin="0,0,12,0"/>
-                    
-                    <Slider x:Name="VolumeSlider" Grid.Column="1" 
-                            Value="75" Minimum="0" Maximum="100"
-                            VerticalAlignment="Center" Height="8"
-                            ValueChanged="OnVolumeChanged"
-                            IsMoveToPointEnabled="True">
-                        <Slider.Template>
-                            <ControlTemplate TargetType="Slider">
-                                <Grid>
-                                    <Border Background="{StaticResource SliderTrackBrush}" 
-                                            CornerRadius="4" Height="8"/>
-                                    <Border x:Name="PART_SelectionRange" 
-                                            Background="{StaticResource HyperBlueBrush}" 
-                                            CornerRadius="4" Height="8" HorizontalAlignment="Left"/>
-                                    <Track x:Name="PART_Track">
-                                        <Track.Thumb>
-                                            <Thumb>
-                                                <Thumb.Template>
-                                                    <ControlTemplate TargetType="Thumb">
-                                                        <Ellipse Width="18" Height="18" Fill="White">
-                                                            <Ellipse.Effect>
-                                                                <DropShadowEffect BlurRadius="6" ShadowDepth="1" Opacity="0.3"/>
-                                                            </Ellipse.Effect>
-                                                        </Ellipse>
-                                                    </ControlTemplate>
-                                                </Thumb.Template>
-                                            </Thumb>
-                                        </Track.Thumb>
-                                    </Track>
-                                </Grid>
-                            </ControlTemplate>
-                        </Slider.Template>
-                    </Slider>
-                    
-                    <TextBlock x:Name="VolumeText" Grid.Column="2" Text="75%" 
-                               Foreground="White" FontSize="13" FontWeight="Medium"
-                               VerticalAlignment="Center" Margin="12,0,8,0" Width="38"/>
-                    
-                    <!-- Mute Button -->
-                    <Border x:Name="MuteButton" Grid.Column="3" Background="#40FFFFFF" 
-                            CornerRadius="8" Width="32" Height="32" Cursor="Hand"
-                            MouseLeftButtonDown="OnMuteClick"
+                <!-- TOP TOGGLES: WiFi & Bluetooth Pills -->
+                <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,20">
+                    <!-- WiFi Pill -->
+                    <Border x:Name="WifiTile" Width="150" Height="72" CornerRadius="36"
+                            Background="White" Cursor="Hand" Margin="0,0,8,0"
+                            MouseLeftButtonDown="OnWifiToggle"
                             MouseEnter="OnTileMouseEnter" MouseLeave="OnTileMouseLeave">
-                        <TextBlock x:Name="MuteIcon" Text="🔇" FontSize="14" 
-                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    </Border>
-                </Grid>
-            </Border>
-
-            <!-- Output Device Selector -->
-            <Border Grid.Row="4" Background="#40303030" CornerRadius="12" 
-                    Padding="14,10" Margin="0,0,0,8">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-
-                    <TextBlock Text="🎧" FontSize="18" VerticalAlignment="Center" Margin="0,0,12,0"/>
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <TextBlock Text="Output Device" Foreground="#888" FontSize="10"/>
-                        <TextBlock x:Name="OutputDeviceText" Text="Speakers" 
-                                   Foreground="White" FontSize="12" FontWeight="Medium"/>
-                    </StackPanel>
-                    <Border Grid.Column="2" Background="#50FFFFFF" CornerRadius="8" 
-                            Padding="10,6" Cursor="Hand" 
-                            MouseLeftButtonDown="OnOutputDeviceClick"
-                            MouseEnter="OnTileMouseEnter" MouseLeave="OnTileMouseLeave">
-                        <TextBlock Text="▼" Foreground="White" FontSize="10"/>
-                    </Border>
-                </Grid>
-            </Border>
-
-            <!-- Output Device Dropdown -->
-            <Border x:Name="DeviceDropdown" Grid.Row="5" Background="#E8181818" 
-                    CornerRadius="12" Margin="0,0,0,8" Visibility="Collapsed">
-                <ScrollViewer MaxHeight="120" VerticalScrollBarVisibility="Auto">
-                    <StackPanel x:Name="DeviceList" Margin="8"/>
-                </ScrollViewer>
-            </Border>
-
-            <!-- Bottom: Battery + Info -->
-            <Grid Grid.Row="6">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-
-                <!-- Battery Indicator -->
-                <Border Background="#40303030" CornerRadius="12" Padding="12,10">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock x:Name="BatteryIcon" Text="🔋" FontSize="18" 
-                                   VerticalAlignment="Center" Margin="0,0,10,0"/>
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock x:Name="BatteryText" Text="85%" 
-                                       Foreground="White" FontSize="14" FontWeight="Medium"/>
-                            <TextBlock x:Name="BatteryStatus" Text="Plugged in" 
-                                       Foreground="#888" FontSize="10"/>
+                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                            <Image x:Name="WifiIcon" Source="{StaticResource WifiIcon}" Width="28" Height="28"
+                                   HorizontalAlignment="Center" Margin="0,0,0,4"/>
+                            <TextBlock x:Name="WifiLabel" Text="Wi-Fi" Foreground="Black"
+                                       FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center"/>
                         </StackPanel>
-                    </StackPanel>
+                    </Border>
+
+                    <!-- Bluetooth Pill -->
+                    <Border x:Name="BluetoothTile" Width="150" Height="72" CornerRadius="36"
+                            Background="White" Cursor="Hand" Margin="8,0,0,0"
+                            MouseLeftButtonDown="OnBluetoothToggle"
+                            MouseEnter="OnTileMouseEnter" MouseLeave="OnTileMouseLeave">
+                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                            <Image x:Name="BluetoothIcon" Source="{StaticResource BluetoothIcon}" Width="28" Height="28"
+                                   HorizontalAlignment="Center" Margin="0,0,0,4"/>
+                            <TextBlock x:Name="BluetoothLabel" Text="Bluetooth" Foreground="Black"
+                                       FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- MIDDLE ICON BUTTONS: Gold Circles -->
+                <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,20">
+                    <!-- Airplane Button -->
+                    <Border x:Name="AirplaneTile" Width="48" Height="48" CornerRadius="24"
+                            Background="#D4AF37" Cursor="Hand" Margin="0,0,16,0"
+                            MouseLeftButtonDown="OnAirplaneToggle"
+                            MouseEnter="OnTileMouseEnter" MouseLeave="OnTileMouseLeave">
+                        <Viewbox Width="22" Height="22">
+                            <Canvas Width="24" Height="24">
+                                <Path Data="M21,16V14L13,9V3.5A1.5,1.5 0 0,0 11.5,2A1.5,1.5 0 0,0 10,3.5V9L2,14V16L10,13.5V19L8,20.5V22L11.5,21L15,22V20.5L13,19V13.5L21,16Z"
+                                      Fill="#1E1E1E"/>
+                            </Canvas>
+                        </Viewbox>
+                    </Border>
+
+                    <!-- Eye Button (Night Light) -->
+                    <Border x:Name="NightLightTile" Width="48" Height="48" CornerRadius="24"
+                            Background="#D4AF37" Cursor="Hand" Margin="0,0,16,0"
+                            MouseLeftButtonDown="OnNightLightToggle"
+                            MouseEnter="OnTileMouseEnter" MouseLeave="OnTileMouseLeave">
+                        <Viewbox Width="22" Height="22">
+                            <Canvas Width="24" Height="24">
+                                <Path Data="M12,9A3,3 0 0,0 9,12A3,3 0 0,0 12,15A3,3 0 0,0 15,12A3,3 0 0,0 12,9M12,17A5,5 0 0,1 7,12A5,5 0 0,1 12,7A5,5 0 0,1 17,12A5,5 0 0,1 12,17M12,4.5C7,4.5 2.73,7.61 1,12C2.73,16.39 7,19.5 12,19.5C17,19.5 21.27,16.39 23,12C21.27,7.61 17,4.5 12,4.5Z"
+                                      Fill="#1E1E1E"/>
+                            </Canvas>
+                        </Viewbox>
+                    </Border>
+
+                    <!-- Fingerprint Button (Focus) -->
+                    <Border x:Name="FocusTile" Width="48" Height="48" CornerRadius="24"
+                            Background="#D4AF37" Cursor="Hand" Margin="0,0,16,0"
+                            MouseLeftButtonDown="OnFocusToggle"
+                            MouseEnter="OnTileMouseEnter" MouseLeave="OnTileMouseLeave">
+                        <Viewbox Width="22" Height="22">
+                            <Canvas Width="24" Height="24">
+                                <Path Data="M17.81,4.47C17.73,4.47 17.65,4.45 17.58,4.41C15.66,3.42 14,3 12,3C10.03,3 8.15,3.47 6.44,4.41C6.2,4.54 5.9,4.45 5.76,4.21C5.63,3.97 5.72,3.66 5.96,3.53C7.82,2.5 9.86,2 12,2C14.14,2 16,2.47 18.04,3.5C18.29,3.64 18.38,3.95 18.25,4.19C18.16,4.37 18,4.47 17.81,4.47M3.5,9.72C3.4,9.72 3.3,9.69 3.21,9.63C3,9.47 2.93,9.16 3.09,8.93C4.08,7.53 5.34,6.43 6.84,5.66C10,4.04 14,4.03 17.15,5.65C18.65,6.42 19.91,7.5 20.9,8.9C21.06,9.12 21,9.44 20.78,9.6C20.55,9.76 20.24,9.71 20.08,9.5C19.18,8.22 18.04,7.23 16.69,6.54C13.82,5.07 10.15,5.07 7.29,6.55C5.93,7.25 4.79,8.25 3.89,9.5C3.81,9.65 3.66,9.72 3.5,9.72M9.75,21.79C9.62,21.79 9.5,21.74 9.4,21.64C9.2,21.44 9.2,21.1 9.4,20.9L10.87,19.5C11.07,19.3 11.41,19.3 11.61,19.5C11.81,19.7 11.81,20.04 11.61,20.24L10.14,21.64C10.04,21.74 9.91,21.79 9.75,21.79M16.3,19.94C16.17,19.94 16.04,19.89 15.94,19.79C15.74,19.59 15.74,19.25 15.94,19.05L18.07,16.96C18.27,16.76 18.61,16.76 18.81,16.96C19.01,17.16 19.01,17.5 18.81,17.7L16.68,19.79C16.58,19.89 16.45,19.94 16.3,19.94M12,18.5C10.62,18.5 9.5,17.38 9.5,16C9.5,14.62 10.62,13.5 12,13.5C13.38,13.5 14.5,14.62 14.5,16C14.5,17.38 13.38,18.5 12,18.5M12,7.5C9.08,7.5 6.54,9.5 5.87,12.21C5.84,12.32 5.84,12.44 5.87,12.55C6.37,14.31 7.69,15.72 9.42,16.29C9.67,16.36 9.81,16.63 9.74,16.88C9.68,17.08 9.5,17.21 9.29,17.21C9.26,17.21 9.23,17.21 9.2,17.2C7.15,16.54 5.54,14.83 4.96,12.66C4.88,12.36 4.88,12.04 4.96,11.74C5.71,8.63 8.6,6.5 12,6.5C13.21,6.5 14.39,6.8 15.43,7.35C15.67,7.47 15.76,7.77 15.64,8.01C15.52,8.25 15.22,8.34 14.98,8.22C14.08,7.73 13.06,7.5 12,7.5Z"
+                                      Fill="#1E1E1E"/>
+                            </Canvas>
+                        </Viewbox>
+                    </Border>
+
+                    <!-- Settings Button -->
+                    <Border x:Name="SettingsTile" Width="48" Height="48" CornerRadius="24"
+                            Background="#D4AF37" Cursor="Hand"
+                            MouseLeftButtonDown="OnSettingsClick"
+                            MouseEnter="OnTileMouseEnter" MouseLeave="OnTileMouseLeave">
+                        <Viewbox Width="22" Height="22">
+                            <Canvas Width="24" Height="24">
+                                <Path Data="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.67 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z"
+                                      Fill="#1E1E1E"/>
+                            </Canvas>
+                        </Viewbox>
+                    </Border>
+                </StackPanel>
+
+                <!-- SYSTEM METRICS SECTION -->
+                <StackPanel Grid.Row="2" HorizontalAlignment="Center" Margin="0,10,0,20">
+                    <!-- CPU CIRCULAR BAR -->
+                    <Grid Width="96" Height="96" Margin="0,0,0,16" HorizontalAlignment="Center">
+                        <!-- Background ring -->
+                        <Ellipse Stroke="#9E9E9E" StrokeThickness="12" Fill="Transparent"/>
+
+                        <!-- CPU usage arc (red) -->
+                        <Canvas x:Name="CpuCanvas" Width="96" Height="96">
+                            <Path x:Name="CpuArc" Stroke="#FF2E2E" StrokeThickness="12"
+                                  Fill="Transparent" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                        </Canvas>
+
+                        <!-- Inner white circle -->
+                        <Ellipse Width="72" Height="72" Fill="White"/>
+
+                        <!-- CPU text -->
+                        <TextBlock Text="CPU" FontSize="16" FontWeight="SemiBold"
+                                   Foreground="#333333" HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
+                    </Grid>
+
+                    <!-- RAM HORIZONTAL BAR -->
+                    <Border Width="240" Height="28" CornerRadius="14"
+                            Background="#E0E0E0" Margin="0,0,0,12">
+                        <Grid>
+                            <!-- RAM fill -->
+                            <Border x:Name="RamFill" CornerRadius="14"
+                                    Background="#FF2E2E" HorizontalAlignment="Left" Width="120"/>
+
+                            <!-- RAM text -->
+                            <TextBlock x:Name="RamText" Text="RAM 50%"
+                                       FontSize="12" FontWeight="SemiBold"
+                                       Foreground="White" HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- SSD DUAL COLOR BAR -->
+                    <Border Width="260" Height="32" CornerRadius="16" Margin="0,0,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition x:Name="SsdUsedColumn" Width="130*"/>
+                                <ColumnDefinition x:Name="SsdFreeColumn" Width="130*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Used space (red) -->
+                            <Border Grid.Column="0" Background="#FF2E2E"
+                                    CornerRadius="16,0,0,16">
+                                <TextBlock x:Name="SsdUsedText" Text="128 GB"
+                                           FontSize="11" FontWeight="SemiBold"
+                                           Foreground="White" HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"/>
+                            </Border>
+
+                            <!-- Free space (green) -->
+                            <Border Grid.Column="1" Background="#7ED957"
+                                    CornerRadius="0,16,16,0">
+                                <TextBlock x:Name="SsdFreeText" Text="128 GB"
+                                           FontSize="11" FontWeight="SemiBold"
+                                           Foreground="White" HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"/>
+                            </Border>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+
+                <!-- AUDIO SLIDER -->
+                <Border Grid.Row="4" Background="#2C2C2E" CornerRadius="18"
+                        Height="36" Margin="0,0,0,12" HorizontalAlignment="Center" Width="280">
+                    <Grid Margin="12,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Image x:Name="VolumeIconImage" Source="{StaticResource VolumeIcon}"
+                               Width="18" Height="18" VerticalAlignment="Center" Margin="0,0,10,0"/>
+
+                        <Slider x:Name="VolumeSlider" Grid.Column="1"
+                                Value="75" Minimum="0" Maximum="100"
+                                VerticalAlignment="Center" Height="6"
+                                ValueChanged="OnVolumeChanged"
+                                IsMoveToPointEnabled="True">
+                            <Slider.Template>
+                                <ControlTemplate TargetType="Slider">
+                                    <Grid>
+                                        <Border Background="#3A3A3C"
+                                                CornerRadius="3" Height="6"/>
+                                        <Border x:Name="PART_SelectionRange"
+                                                Background="#FFFFFF"
+                                                CornerRadius="3" Height="6" HorizontalAlignment="Left"/>
+                                        <Track x:Name="PART_Track">
+                                            <Track.Thumb>
+                                                <Thumb>
+                                                    <Thumb.Template>
+                                                        <ControlTemplate TargetType="Thumb">
+                                                            <Ellipse Width="14" Height="14" Fill="White">
+                                                                <Ellipse.Effect>
+                                                                    <DropShadowEffect BlurRadius="6" ShadowDepth="2" Opacity="0.3"/>
+                                                                </Ellipse.Effect>
+                                                            </Ellipse>
+                                                        </ControlTemplate>
+                                                    </Thumb.Template>
+                                                </Thumb>
+                                            </Track.Thumb>
+                                        </Track>
+                                    </Grid>
+                                </ControlTemplate>
+                            </Slider.Template>
+                        </Slider>
+
+                        <TextBlock x:Name="VolumeText" Grid.Column="2" Text="75%"
+                                   Foreground="White" FontSize="12" FontWeight="Medium"
+                                   VerticalAlignment="Center" Margin="10,0,0,0"/>
+                    </Grid>
                 </Border>
 
-                <!-- Quick Edit Button -->
-                <Border Grid.Column="1" Background="#40303030" CornerRadius="12" 
-                        Padding="14,10" Margin="8,0,0,0" Cursor="Hand"
-                        MouseLeftButtonDown="OnEditClick"
-                        MouseEnter="OnTileMouseEnter" MouseLeave="OnTileMouseLeave">
-                    <TextBlock Text="✏️" FontSize="16" VerticalAlignment="Center"/>
+                <!-- WHITE BRIGHTNESS SLIDER -->
+                <Border Grid.Row="5" Background="#FFFFFF" CornerRadius="18"
+                        Height="36" Margin="0,0,0,16" HorizontalAlignment="Center" Width="260">
+                    <Grid Margin="12,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Viewbox Width="18" Height="18" Margin="0,0,10,0">
+                            <Canvas Width="24" Height="24">
+                                <Path Data="M12,18C11.11,18 10.26,17.8 9.5,17.45C11.56,16.5 13,14.42 13,12C13,9.58 11.56,7.5 9.5,6.55C10.26,6.2 11.11,6 12,6A6,6 0 0,1 18,12A6,6 0 0,1 12,18M20,8.69V4H15.31L12,0.69L8.69,4H4V8.69L0.69,12L4,15.31V20H8.69L12,23.31L15.31,20H20V15.31L23.31,12L20,8.69Z"
+                                      Fill="#555555"/>
+                            </Canvas>
+                        </Viewbox>
+
+                        <Slider x:Name="BrightnessSlider" Grid.Column="1"
+                                Value="75" Minimum="0" Maximum="100"
+                                VerticalAlignment="Center" Height="6"
+                                ValueChanged="OnBrightnessChanged"
+                                IsMoveToPointEnabled="True">
+                            <Slider.Template>
+                                <ControlTemplate TargetType="Slider">
+                                    <Grid>
+                                        <Border Background="#E0E0E0"
+                                                CornerRadius="3" Height="6"/>
+                                        <Border x:Name="PART_SelectionRange"
+                                                Background="#555555"
+                                                CornerRadius="3" Height="6" HorizontalAlignment="Left"/>
+                                        <Track x:Name="PART_Track">
+                                            <Track.Thumb>
+                                                <Thumb>
+                                                    <Thumb.Template>
+                                                        <ControlTemplate TargetType="Thumb">
+                                                            <Ellipse Width="24" Height="24" Fill="#FFFFFF">
+                                                                <Ellipse.Effect>
+                                                                    <DropShadowEffect BlurRadius="4" ShadowDepth="1" Opacity="0.2" Color="#000000"/>
+                                                                </Ellipse.Effect>
+                                                            </Ellipse>
+                                                        </ControlTemplate>
+                                                    </Thumb.Template>
+                                                </Thumb>
+                                            </Track.Thumb>
+                                        </Track>
+                                    </Grid>
+                                </ControlTemplate>
+                            </Slider.Template>
+                        </Slider>
+                    </Grid>
                 </Border>
             </Grid>
         </Grid>

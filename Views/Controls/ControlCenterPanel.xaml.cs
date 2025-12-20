@@ -50,11 +50,18 @@ namespace NI.Views.Controls
         // Services
         private BluetoothService? _bluetoothService;
 
+        // System metrics
+        private PerformanceCounter? _cpuCounter;
+        private PerformanceCounter? _ramAvailableCounter;
+        private DispatcherTimer? _metricsTimer;
+        private float _currentCpu = 0f;
+        private ulong _totalRamBytes = 0;
+
         // Brushes
-        private static readonly SolidColorBrush TileActiveBrush = new(Color.FromArgb(0xCC, 0x4C, 0x8D, 0xFF));
-        private static readonly SolidColorBrush TileInactiveBrush = new(Color.FromArgb(0xCC, 0x20, 0x20, 0x20));
-        private static readonly SolidColorBrush TileDisabledBrush = new(Color.FromArgb(0xCC, 0x18, 0x18, 0x18));
-        private static readonly SolidColorBrush HyperOrangeBrush = new(Color.FromRgb(0xFF, 0x95, 0x00));
+        private static readonly SolidColorBrush TileActiveBrush = new(Color.FromArgb(0xCC, 0x3A, 0x7B, 0xFF));
+        private static readonly SolidColorBrush TileInactiveBrush = new(Color.FromRgb(0x2C, 0x2C, 0x2E));
+        private static readonly SolidColorBrush TileDisabledBrush = new(Color.FromRgb(0x1C, 0x1C, 0x1E));
+        private static readonly SolidColorBrush HyperOrangeBrush = new(Color.FromRgb(0xFF, 0x8C, 0x1A));
         private static readonly SolidColorBrush HyperPurpleBrush = new(Color.FromRgb(0xAF, 0x52, 0xDE));
         private static readonly SolidColorBrush MuteActiveBrush = new(Color.FromRgb(0xCC, 0x33, 0x33));
         private static readonly SolidColorBrush MuteInactiveBrush = new(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF));
@@ -69,6 +76,7 @@ namespace NI.Views.Controls
             InitializeComponent();
             InitializeTileTransforms();
             InitializeServices();
+            InitializeSystemMetrics();
             LoadState();
             LoadDevices();
             LoadBattery();
@@ -80,8 +88,8 @@ namespace NI.Views.Controls
         private void InitializeTileTransforms()
         {
             // Replace frozen transforms from XAML styles with animatable ones
-            var tiles = new[] { WifiTile, BluetoothTile, AirplaneTile, HotspotTile, 
-                               NightLightTile, FocusTile, SettingsTile, MuteButton };
+            var tiles = new[] { WifiTile, BluetoothTile, AirplaneTile,
+                               NightLightTile, FocusTile, SettingsTile };
             foreach (var tile in tiles)
             {
                 if (tile != null)
@@ -148,9 +156,199 @@ namespace NI.Views.Controls
             {
                 _bluetoothEnabled = RadioService.IsBluetoothOn;
                 UpdateAllToggleUI();
-                
+
                 if (_bluetoothEnabled) LoadBluetoothDevices();
             });
+        }
+
+        private void InitializeSystemMetrics()
+        {
+            try
+            {
+                // Initialize CPU performance counter
+                _cpuCounter = new PerformanceCounter("Processor", "% Processor Time", "_Total");
+                _cpuCounter.NextValue(); // First call always returns 0, prime it
+
+                // Initialize RAM performance counter
+                _ramAvailableCounter = new PerformanceCounter("Memory", "Available Bytes");
+
+                // Get total RAM using WMI
+                try
+                {
+                    using var searcher = new System.Management.ManagementObjectSearcher(
+                        "SELECT TotalPhysicalMemory FROM Win32_ComputerSystem");
+                    foreach (var obj in searcher.Get())
+                    {
+                        _totalRamBytes = Convert.ToUInt64(obj["TotalPhysicalMemory"]);
+                        break;
+                    }
+                }
+                catch
+                {
+                    _totalRamBytes = 16UL * 1024 * 1024 * 1024; // Fallback: 16GB
+                }
+
+                // Create timer for updating metrics (every 1000ms)
+                _metricsTimer = new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMilliseconds(1000)
+                };
+                _metricsTimer.Tick += OnMetricsTimerTick;
+                _metricsTimer.Start();
+
+                // Initial update
+                UpdateSystemMetrics();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"System metrics init error: {ex.Message}");
+            }
+        }
+
+        private void OnMetricsTimerTick(object? sender, EventArgs e)
+        {
+            try
+            {
+                UpdateSystemMetrics();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Metrics update error: {ex.Message}");
+            }
+        }
+
+        private void UpdateSystemMetrics()
+        {
+            // Update CPU
+            UpdateCpuUsage();
+
+            // Update RAM
+            UpdateRamUsage();
+
+            // Update SSD
+            UpdateSsdUsage();
+        }
+
+        private void UpdateCpuUsage()
+        {
+            if (_cpuCounter == null || CpuArc == null) return;
+
+            try
+            {
+                _currentCpu = _cpuCounter.NextValue();
+                float percentage = Math.Min(_currentCpu, 100f);
+
+                // Draw CPU arc (0-360 degrees based on percentage)
+                double angle = (percentage / 100.0) * 360.0;
+                double radius = 42; // (96 - 12) / 2 = 42 (radius to center of stroke)
+                double centerX = 48;
+                double centerY = 48;
+
+                // Calculate arc path
+                if (angle >= 360)
+                {
+                    // Full circle
+                    var geometry = new EllipseGeometry(new Point(centerX, centerY), radius, radius);
+                    CpuArc.Data = geometry;
+                }
+                else if (angle > 0)
+                {
+                    // Partial arc
+                    double startAngle = -90; // Start from top
+                    double endAngle = startAngle + angle;
+
+                    double startX = centerX + radius * Math.Cos(startAngle * Math.PI / 180);
+                    double startY = centerY + radius * Math.Sin(startAngle * Math.PI / 180);
+                    double endX = centerX + radius * Math.Cos(endAngle * Math.PI / 180);
+                    double endY = centerY + radius * Math.Sin(endAngle * Math.PI / 180);
+
+                    bool isLargeArc = angle > 180;
+                    var pathFigure = new PathFigure { StartPoint = new Point(startX, startY) };
+                    pathFigure.Segments.Add(new ArcSegment
+                    {
+                        Point = new Point(endX, endY),
+                        Size = new Size(radius, radius),
+                        IsLargeArc = isLargeArc,
+                        SweepDirection = SweepDirection.Clockwise
+                    });
+
+                    var pathGeometry = new PathGeometry();
+                    pathGeometry.Figures.Add(pathFigure);
+                    CpuArc.Data = pathGeometry;
+                }
+                else
+                {
+                    // No arc
+                    CpuArc.Data = null;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"CPU update error: {ex.Message}");
+            }
+        }
+
+        private void UpdateRamUsage()
+        {
+            if (RamFill == null || RamText == null || _ramAvailableCounter == null) return;
+
+            try
+            {
+                // Get available RAM in bytes
+                float availableBytes = _ramAvailableCounter.NextValue();
+                ulong usedRam = _totalRamBytes - (ulong)availableBytes;
+
+                double usagePercent = (double)usedRam / _totalRamBytes * 100.0;
+                int percentage = (int)Math.Round(usagePercent);
+
+                // Update RAM fill width (240px total width)
+                double maxWidth = 240;
+                RamFill.Width = (percentage / 100.0) * maxWidth;
+
+                // Update text
+                RamText.Text = $"RAM {percentage}%";
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"RAM update error: {ex.Message}");
+            }
+        }
+
+        private void UpdateSsdUsage()
+        {
+            if (SsdUsedColumn == null || SsdFreeColumn == null ||
+                SsdUsedText == null || SsdFreeText == null) return;
+
+            try
+            {
+                var drive = new System.IO.DriveInfo("C:\\");
+                if (drive.IsReady)
+                {
+                    long totalBytes = drive.TotalSize;
+                    long freeBytes = drive.AvailableFreeSpace;
+                    long usedBytes = totalBytes - freeBytes;
+
+                    // Convert to GB
+                    int usedGB = (int)(usedBytes / (1024 * 1024 * 1024));
+                    int freeGB = (int)(freeBytes / (1024 * 1024 * 1024));
+
+                    // Calculate proportion for grid columns
+                    double usedProportion = (double)usedBytes / totalBytes;
+                    double freeProportion = 1.0 - usedProportion;
+
+                    // Update column widths
+                    SsdUsedColumn.Width = new GridLength(usedProportion, GridUnitType.Star);
+                    SsdFreeColumn.Width = new GridLength(freeProportion, GridUnitType.Star);
+
+                    // Update text
+                    SsdUsedText.Text = $"{usedGB} GB";
+                    SsdFreeText.Text = $"{freeGB} GB";
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"SSD update error: {ex.Message}");
+            }
         }
 
         // PHASE 0: OnStatePollTick and PollHardwareStates REMOVED
@@ -289,20 +487,27 @@ namespace NI.Views.Controls
             VolumeSlider.Value = AudioService.Volume;
             VolumeText.Text = $"{AudioService.Volume}%";
             _isMuted = AudioService.IsMuted;
-            UpdateMuteButton();
+            // UpdateMuteButton(); // Removed: MuteButton no longer exists
+
+            // Initialize vertical volume bar fill
+            if (VolumeFill != null)
+            {
+                double maxHeight = 480;
+                VolumeFill.Height = (AudioService.Volume / 100.0) * maxHeight;
+            }
 
             // Brightness
             try
             {
                 var brightness = BrightnessService.GetBrightness();
                 BrightnessSlider.Value = brightness;
-                BrightnessText.Text = $"{brightness}%";
+                // BrightnessText removed from UI
                 _lastBrightness = brightness;
             }
             catch
             {
                 BrightnessSlider.Value = 75;
-                BrightnessText.Text = "75%";
+                // BrightnessText removed from UI
                 _lastBrightness = 75;
             }
 
@@ -312,7 +517,8 @@ namespace NI.Views.Controls
 
         private void LoadDevices()
         {
-            DeviceList.Children.Clear();
+            // DeviceList removed from new UI design - method disabled
+            /*
             var devices = AudioService.GetOutputDevices();
 
             foreach (var device in devices)
@@ -342,93 +548,22 @@ namespace NI.Views.Controls
                 item.Child = stack;
                 DeviceList.Children.Add(item);
             }
+            */
         }
 
         private void LoadBattery()
         {
-            try
-            {
-                var batteryReport = Windows.Devices.Power.Battery.AggregateBattery.GetReport();
-                if (batteryReport.Status != Windows.System.Power.BatteryStatus.NotPresent)
-                {
-                    double? remaining = batteryReport.RemainingCapacityInMilliwattHours;
-                    double? full = batteryReport.FullChargeCapacityInMilliwattHours;
-
-                    if (remaining.HasValue && full.HasValue && full.Value > 0)
-                    {
-                        int batteryPercent = (int)((remaining.Value / full.Value) * 100);
-                        bool isCharging = batteryReport.Status == Windows.System.Power.BatteryStatus.Charging;
-
-                        BatteryText.Text = $"{batteryPercent}%";
-                        BatteryStatus.Text = isCharging ? "Charging" : "On battery";
-                        BatteryIcon.Text = isCharging ? "⚡" : batteryPercent switch
-                        {
-                            > 80 => "🔋",
-                            > 50 => "🔋",
-                            > 20 => "🪫",
-                            _ => "🪫"
-                        };
-                        return;
-                    }
-                }
-
-                // Desktop
-                BatteryText.Text = "AC";
-                BatteryStatus.Text = "Desktop";
-                BatteryIcon.Text = "🔌";
-            }
-            catch
-            {
-                BatteryText.Text = "AC";
-                BatteryStatus.Text = "Desktop";
-                BatteryIcon.Text = "🔌";
-            }
+            // Battery UI removed from new design - method disabled
         }
 
         private async void LoadWifiNetworks()
         {
-            if (!_wifiEnabled) return;
-
-            try
-            {
-                var networks = await WifiService.GetAvailableNetworksAsync();
-                var connected = networks.FirstOrDefault(n => n.IsConnected);
-                if (connected != null)
-                {
-                    WifiSubLabel.Text = connected.SSID;
-                }
-                else
-                {
-                    WifiSubLabel.Text = "Connected";
-                }
-            }
-            catch
-            {
-                WifiSubLabel.Text = "Connected";
-            }
+            // WifiSubLabel removed from new design - method disabled
         }
 
         private async void LoadBluetoothDevices()
         {
-            if (_bluetoothService == null || !_bluetoothEnabled) return;
-
-            try
-            {
-                var devices = await _bluetoothService.GetPairedDevicesAsync();
-                var connected = devices.FirstOrDefault(d => d.IsConnected);
-                if (connected != null)
-                {
-                    BluetoothSubLabel.Text = connected.Name;
-                }
-                else
-                {
-                    BluetoothSubLabel.Text = "On";
-                }
-            }
-            catch
-            {
-                BluetoothSubLabel.Text = "On";
-            }
+            // BluetoothSubLabel removed from new design - method disabled
         }
 
         #endregion
@@ -549,7 +684,7 @@ namespace NI.Views.Controls
         private void OnHotspotToggle(object sender, MouseButtonEventArgs e)
         {
             if (_airplaneMode) return;
-            AnimateTilePress(HotspotTile);
+            // AnimateTilePress(HotspotTile); // HotspotTile removed from new design
 
             _hotspotEnabled = !_hotspotEnabled;
             UpdateAllToggleUI();
@@ -616,49 +751,51 @@ namespace NI.Views.Controls
 
         private void UpdateAllToggleUI()
         {
-            // WiFi - reflect REAL hardware state
+            // WiFi - Active: purple-pink gradient, Inactive: white with black text
             bool wifiActive = _wifiEnabled && !_airplaneMode;
-            WifiTile.Background = wifiActive ? TileActiveBrush : (_airplaneMode ? TileDisabledBrush : TileInactiveBrush);
-            WifiLabel.Foreground = wifiActive ? Brushes.White : new SolidColorBrush(Color.FromArgb(0xAA, 0xFF, 0xFF, 0xFF));
-            
-            // Update Wi-Fi sub-label based on real state
-            if (!wifiActive)
+            if (wifiActive)
             {
-                WifiSubLabel.Text = _airplaneMode ? "Kapalı" : "Kapalı";
+                var wifiGradient = new LinearGradientBrush();
+                wifiGradient.StartPoint = new Point(0, 0.5);
+                wifiGradient.EndPoint = new Point(1, 0.5);
+                wifiGradient.GradientStops.Add(new GradientStop(Color.FromRgb(0x8B, 0x2C, 0xF5), 0));
+                wifiGradient.GradientStops.Add(new GradientStop(Color.FromRgb(0xE9, 0x1E, 0x63), 1));
+                WifiTile.Background = wifiGradient;
+                WifiLabel.Foreground = Brushes.White;
+                // WifiIcon color is controlled by the image resource
             }
             else
             {
-                WifiSubLabel.Text = WifiService.ConnectedNetwork ?? "Bağlı";
+                WifiTile.Background = Brushes.White;
+                WifiLabel.Foreground = Brushes.Black;
             }
-            SetTileGlow(WifiTile, wifiActive);
-            
-            // Update Wi-Fi icon opacity
-            var wifiIcon = WifiTile.FindName("WifiIcon") as System.Windows.Controls.Image;
-            if (wifiIcon != null) wifiIcon.Opacity = wifiActive ? 1.0 : 0.5;
 
-            // Bluetooth - reflect REAL hardware state
+            // Bluetooth - Active: orange-red gradient, Inactive: white with black text
             bool btActive = _bluetoothEnabled && !_airplaneMode;
-            BluetoothTile.Background = btActive ? TileActiveBrush : (_airplaneMode ? TileDisabledBrush : TileInactiveBrush);
-            BluetoothLabel.Foreground = btActive ? Brushes.White : new SolidColorBrush(Color.FromArgb(0xAA, 0xFF, 0xFF, 0xFF));
-            BluetoothSubLabel.Text = btActive ? "Açık" : "Kapalı";
-            SetTileGlow(BluetoothTile, btActive);
+            if (btActive)
+            {
+                var btGradient = new LinearGradientBrush();
+                btGradient.StartPoint = new Point(0, 0.5);
+                btGradient.EndPoint = new Point(1, 0.5);
+                btGradient.GradientStops.Add(new GradientStop(Color.FromRgb(0xFF, 0x98, 0x00), 0));
+                btGradient.GradientStops.Add(new GradientStop(Color.FromRgb(0xF4, 0x43, 0x36), 1));
+                BluetoothTile.Background = btGradient;
+                BluetoothLabel.Foreground = Brushes.White;
+            }
+            else
+            {
+                BluetoothTile.Background = Brushes.White;
+                BluetoothLabel.Foreground = Brushes.Black;
+            }
 
-            // Airplane
-            AirplaneTile.Background = _airplaneMode ? HyperOrangeBrush : TileInactiveBrush;
-            SetTileGlow(AirplaneTile, _airplaneMode, Color.FromRgb(0xFF, 0x95, 0x00));
+            // Airplane - gold button, changes color when active
+            AirplaneTile.Background = _airplaneMode ? new SolidColorBrush(Color.FromRgb(0xFF, 0x8C, 0x1A)) : new SolidColorBrush(Color.FromRgb(0xD4, 0xAF, 0x37));
 
-            // Hotspot
-            bool hotspotActive = _hotspotEnabled && !_airplaneMode;
-            HotspotTile.Background = hotspotActive ? TileActiveBrush : (_airplaneMode ? TileDisabledBrush : TileInactiveBrush);
-            SetTileGlow(HotspotTile, hotspotActive);
+            // Night Light - gold button
+            NightLightTile.Background = _nightLightEnabled ? new SolidColorBrush(Color.FromRgb(0xFF, 0x8C, 0x1A)) : new SolidColorBrush(Color.FromRgb(0xD4, 0xAF, 0x37));
 
-            // Night Light
-            NightLightTile.Background = _nightLightEnabled ? HyperOrangeBrush : TileInactiveBrush;
-            SetTileGlow(NightLightTile, _nightLightEnabled, Color.FromRgb(0xFF, 0x95, 0x00));
-
-            // Focus
-            FocusTile.Background = _focusEnabled ? HyperPurpleBrush : TileInactiveBrush;
-            SetTileGlow(FocusTile, _focusEnabled, Color.FromRgb(0xAF, 0x52, 0xDE));
+            // Focus - gold button
+            FocusTile.Background = _focusEnabled ? new SolidColorBrush(Color.FromRgb(0xFF, 0x8C, 0x1A)) : new SolidColorBrush(Color.FromRgb(0xD4, 0xAF, 0x37));
         }
 
         private void SetTileGlow(Border tile, bool active, Color? glowColor = null)
@@ -686,10 +823,9 @@ namespace NI.Views.Controls
 
         private void OnBrightnessChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            if (BrightnessText == null) return;
-
+            // BrightnessText removed from new design
             int brightness = (int)e.NewValue;
-            BrightnessText.Text = $"{brightness}%";
+            // BrightnessText.Text = $"{brightness}%"; // Removed
 
             // Real brightness control
             try
@@ -706,30 +842,28 @@ namespace NI.Views.Controls
             int volume = (int)e.NewValue;
             AudioService.Volume = volume;
             VolumeText.Text = $"{volume}%";
+
+            // Update vertical volume bar fill height
+            if (VolumeFill != null)
+            {
+                // Calculate fill height based on volume (0-100)
+                // Volume bar total height is approx 480px (520 - 40px margins)
+                double maxHeight = 480;
+                VolumeFill.Height = (volume / 100.0) * maxHeight;
+            }
         }
 
         private void OnMuteClick(object sender, MouseButtonEventArgs e)
         {
+            // MuteButton removed from new design
             e.Handled = true;
-            AnimateTilePress(MuteButton);
-
             _isMuted = !_isMuted;
             AudioService.IsMuted = _isMuted;
-            UpdateMuteButton();
         }
 
         private void UpdateMuteButton()
         {
-            if (_isMuted)
-            {
-                MuteButton.Background = MuteActiveBrush;
-                MuteIcon.Text = "🔊";
-            }
-            else
-            {
-                MuteButton.Background = MuteInactiveBrush;
-                MuteIcon.Text = "🔇";
-            }
+            // MuteButton removed from new design - method disabled
         }
 
         #endregion
@@ -738,48 +872,18 @@ namespace NI.Views.Controls
 
         private void OnOutputDeviceClick(object sender, MouseButtonEventArgs e)
         {
+            // DeviceDropdown removed from new design - method disabled
             e.Handled = true;
-            _deviceDropdownOpen = !_deviceDropdownOpen;
-
-            if (_deviceDropdownOpen)
-            {
-                DeviceDropdown.Visibility = Visibility.Visible;
-                var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(100));
-                DeviceDropdown.BeginAnimation(OpacityProperty, fadeIn);
-            }
-            else
-            {
-                var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(80));
-                fadeOut.Completed += (s, args) => DeviceDropdown.Visibility = Visibility.Collapsed;
-                DeviceDropdown.BeginAnimation(OpacityProperty, fadeOut);
-            }
         }
 
         private void OnDeviceSelected(object sender, MouseButtonEventArgs e)
         {
-            if (sender is Border border && border.Tag is string deviceId)
-            {
-                _currentDevice = deviceId;
-                AudioService.SetOutputDevice(deviceId);
-                UpdateOutputDevice();
-                LoadDevices();
-
-                // Close dropdown with animation
-                var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(80));
-                fadeOut.Completed += (s, args) =>
-                {
-                    DeviceDropdown.Visibility = Visibility.Collapsed;
-                    _deviceDropdownOpen = false;
-                };
-                DeviceDropdown.BeginAnimation(OpacityProperty, fadeOut);
-            }
+            // DeviceDropdown removed from new design - method disabled
         }
 
         private void UpdateOutputDevice()
         {
-            var devices = AudioService.GetOutputDevices();
-            var device = devices.Find(d => d.Id == _currentDevice);
-            OutputDeviceText.Text = device?.Name ?? "Speakers";
+            // OutputDeviceText removed from new design - method disabled
         }
 
         #endregion
@@ -836,7 +940,19 @@ namespace NI.Views.Controls
             {
                 StopAllScanning();
 
-                // PHASE 0: State polling timer removed
+                // Stop and dispose metrics timer
+                if (_metricsTimer != null)
+                {
+                    _metricsTimer.Stop();
+                    _metricsTimer.Tick -= OnMetricsTimerTick;
+                    _metricsTimer = null;
+                }
+
+                // Dispose performance counters
+                _cpuCounter?.Dispose();
+                _cpuCounter = null;
+                _ramAvailableCounter?.Dispose();
+                _ramAvailableCounter = null;
 
                 // Unsubscribe from radio state changes
                 RadioService.WifiStateChanged -= OnWifiHardwareStateChanged;

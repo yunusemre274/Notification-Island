@@ -9,20 +9,23 @@ using System.Threading.Tasks;
 namespace NI.Services.AI
 {
     /// <summary>
-    /// PHASE 4: Ollama HTTP client with proper error handling
+    /// PHASE 4: Ollama HTTP client with proper error handling and auto-start
     /// </summary>
-    public class OllamaClient
+    public class OllamaClient : IDisposable
     {
         private readonly HttpClient _httpClient;
         private readonly string _baseUrl;
         private readonly string _model;
+        private static Process? _ollamaProcess;
+        private static readonly object _processLock = new();
+        private bool _disposed = false;
 
         public OllamaClient(string baseUrl = "http://localhost:11434",
-                            string model = "llama3.2")
+                            string model = "qwen2.5-coder:7b")
         {
             _baseUrl = baseUrl;
             _model = model;
-            _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+            _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
 
             Debug.WriteLine($"[PHASE4] OllamaClient initialized: {_baseUrl}, model: {_model}");
         }
@@ -77,7 +80,7 @@ namespace NI.Services.AI
         }
 
         /// <summary>
-        /// CRITICAL: Check if Ollama is installed and running
+        /// CRITICAL: Check if Ollama is installed and running, auto-start if needed
         /// Verifies both installation (command exists) and API availability
         /// </summary>
         public async Task<(bool Installed, bool Running, string Message)> VerifyOllamaAsync()
@@ -87,7 +90,7 @@ namespace NI.Services.AI
                 Debug.WriteLine("[CRITICAL] Verifying Ollama installation and status...");
 
                 // 1. Check if ollama command exists (installation check)
-                var processInfo = new System.Diagnostics.ProcessStartInfo
+                var processInfo = new ProcessStartInfo
                 {
                     FileName = "ollama",
                     Arguments = "list",
@@ -100,7 +103,7 @@ namespace NI.Services.AI
                 bool installed = false;
                 try
                 {
-                    using var process = System.Diagnostics.Process.Start(processInfo);
+                    using var process = Process.Start(processInfo);
                     if (process != null)
                     {
                         await process.WaitForExitAsync();
@@ -119,18 +122,27 @@ namespace NI.Services.AI
                 }
 
                 // 2. Check if Ollama API is running
-                var response = await _httpClient.GetAsync($"{_baseUrl}/api/tags");
-                bool running = response.IsSuccessStatusCode;
+                bool running = await IsApiRunningAsync();
 
                 if (running)
                 {
                     Debug.WriteLine("[CRITICAL] Ollama installed and running ✓");
                     return (true, true, "Ollama ready");
                 }
+
+                // 3. Auto-start Ollama if installed but not running
+                Debug.WriteLine("[CRITICAL] Ollama installed but not running - attempting auto-start...");
+                bool started = await StartOllamaAsync();
+
+                if (started)
+                {
+                    Debug.WriteLine("[CRITICAL] Ollama auto-started successfully ✓");
+                    return (true, true, "Ollama started successfully");
+                }
                 else
                 {
-                    Debug.WriteLine("[CRITICAL] Ollama installed but not running");
-                    return (true, false, "Ollama installed but not running. Run 'ollama serve'");
+                    Debug.WriteLine("[CRITICAL] Failed to auto-start Ollama");
+                    return (true, false, "Failed to start Ollama. Please run 'ollama serve' manually.");
                 }
             }
             catch (Exception ex)
@@ -141,22 +153,135 @@ namespace NI.Services.AI
         }
 
         /// <summary>
+        /// AUTO-START: Start Ollama serve process in background
+        /// </summary>
+        private async Task<bool> StartOllamaAsync()
+        {
+            lock (_processLock)
+            {
+                // Don't start if already running
+                if (_ollamaProcess != null && !_ollamaProcess.HasExited)
+                {
+                    Debug.WriteLine("[AUTO-START] Ollama process already running");
+                    return true;
+                }
+
+                try
+                {
+                    Debug.WriteLine("[AUTO-START] Starting Ollama serve...");
+
+                    var startInfo = new ProcessStartInfo
+                    {
+                        FileName = "ollama",
+                        Arguments = "serve",
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        WindowStyle = ProcessWindowStyle.Hidden
+                    };
+
+                    _ollamaProcess = Process.Start(startInfo);
+
+                    if (_ollamaProcess == null)
+                    {
+                        Debug.WriteLine("[AUTO-START] Failed to start Ollama process");
+                        return false;
+                    }
+
+                    Debug.WriteLine($"[AUTO-START] Ollama process started (PID: {_ollamaProcess.Id})");
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[AUTO-START] Error starting Ollama: {ex.Message}");
+                    return false;
+                }
+            }
+
+            // Wait for API to become available (max 10 seconds)
+            Debug.WriteLine("[AUTO-START] Waiting for Ollama API to become available...");
+            for (int i = 0; i < 20; i++)
+            {
+                await Task.Delay(500);
+                if (await IsApiRunningAsync())
+                {
+                    Debug.WriteLine($"[AUTO-START] Ollama API available after {(i + 1) * 500}ms");
+                    return true;
+                }
+            }
+
+            Debug.WriteLine("[AUTO-START] Timeout waiting for Ollama API");
+            return false;
+        }
+
+        /// <summary>
+        /// Quick check if Ollama API is responding
+        /// </summary>
+        private async Task<bool> IsApiRunningAsync()
+        {
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                var response = await _httpClient.GetAsync($"{_baseUrl}/api/tags", cts.Token);
+                return response.IsSuccessStatusCode;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Simple API availability check (faster, for repeat calls)
         /// </summary>
         public async Task<bool> IsAvailableAsync()
         {
-            try
+            Debug.WriteLine("[CRITICAL] Quick Ollama API check...");
+            bool available = await IsApiRunningAsync();
+            Debug.WriteLine($"[CRITICAL] Ollama API available: {available}");
+            return available;
+        }
+
+        /// <summary>
+        /// Cleanup: Stop Ollama process if we started it
+        /// </summary>
+        public void Dispose()
+        {
+            if (_disposed) return;
+
+            _httpClient?.Dispose();
+
+            // Note: We don't kill the Ollama process on disposal
+            // It should keep running for other applications to use
+            // Only clean up if explicitly needed
+
+            _disposed = true;
+            GC.SuppressFinalize(this);
+        }
+
+        /// <summary>
+        /// Manually stop the Ollama process (if started by this client)
+        /// Call this only when shutting down the application
+        /// </summary>
+        public static void StopOllamaProcess()
+        {
+            lock (_processLock)
             {
-                Debug.WriteLine("[CRITICAL] Quick Ollama API check...");
-                var response = await _httpClient.GetAsync($"{_baseUrl}/api/tags");
-                bool available = response.IsSuccessStatusCode;
-                Debug.WriteLine($"[CRITICAL] Ollama API available: {available}");
-                return available;
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[CRITICAL] Ollama API not available: {ex.Message}");
-                return false;
+                if (_ollamaProcess != null && !_ollamaProcess.HasExited)
+                {
+                    try
+                    {
+                        Debug.WriteLine("[CLEANUP] Stopping Ollama process...");
+                        _ollamaProcess.Kill(true);
+                        _ollamaProcess.Dispose();
+                        _ollamaProcess = null;
+                        Debug.WriteLine("[CLEANUP] Ollama process stopped");
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"[CLEANUP] Error stopping Ollama: {ex.Message}");
+                    }
+                }
             }
         }
     }

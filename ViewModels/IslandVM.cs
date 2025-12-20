@@ -641,11 +641,12 @@ namespace NI.ViewModels
 
                     if (!running)
                     {
-                        System.Diagnostics.Debug.WriteLine("[CRITICAL] Ollama installed but not running");
-                        return "❌ Ollama Not Running\n\n" +
-                               "Ollama is installed but not running.\n\n" +
-                               "Start Ollama:\n" +
-                               "• Run 'ollama serve' in terminal\n" +
+                        System.Diagnostics.Debug.WriteLine("[CRITICAL] Ollama failed to auto-start");
+                        return "❌ Ollama Failed to Start\n\n" +
+                               "Could not automatically start Ollama.\n\n" +
+                               "Manual start:\n" +
+                               "• Open terminal\n" +
+                               "• Run: ollama serve\n" +
                                "• Then try your search again";
                     }
 
