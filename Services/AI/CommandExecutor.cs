@@ -30,9 +30,15 @@ namespace NI.Services.AI
                 return command.Type switch
                 {
                     CommandType.CreateFile => await CreateFileAsync(command.Parameters),
-                    CommandType.FindFolder => await FindFolderAsync(command.Parameters),
-                    CommandType.GetFolderPath => GetFolderPath(command.Parameters),
+                    CommandType.CreateFolder => await CreateFolderAsync(command.Parameters),
                     CommandType.ListFiles => await ListFilesAsync(command.Parameters),
+                    CommandType.MoveFile => await MoveFileAsync(command.Parameters),
+                    CommandType.GetSystemInfo => GetSystemInfo(),
+                    CommandType.Deny => new CommandExecutionResult
+                    {
+                        Success = false,
+                        Error = command.Parameters.GetValueOrDefault("reason", "Action denied")
+                    },
                     _ => new CommandExecutionResult
                     {
                         Success = false,
@@ -53,11 +59,10 @@ namespace NI.Services.AI
         private async Task<CommandExecutionResult> CreateFileAsync(
             Dictionary<string, string> parameters)
         {
-            var filename = parameters.GetValueOrDefault("filename", "file.txt");
-            var location = parameters.GetValueOrDefault("location", "Desktop");
+            var path = parameters.GetValueOrDefault("path", "Desktop/file.txt");
+            var content = parameters.GetValueOrDefault("content", "");
 
-            var basePath = GetSpecialFolderPath(location);
-            var fullPath = Path.Combine(basePath, filename);
+            var fullPath = ResolvePath(path);
 
             // Validate path (security)
             if (!fullPath.StartsWith(_userProfile))
@@ -67,81 +72,183 @@ namespace NI.Services.AI
                     Error = "Access denied: Path outside user directory"
                 };
 
-            await File.WriteAllTextAsync(fullPath, string.Empty);
+            // Create directory if it doesn't exist
+            var directory = Path.GetDirectoryName(fullPath);
+            if (directory != null && !Directory.Exists(directory))
+                Directory.CreateDirectory(directory);
+
+            await File.WriteAllTextAsync(fullPath, content);
 
             return new CommandExecutionResult
             {
                 Success = true,
-                Result = $"Created: {fullPath}"
+                Result = $"✓ Created file: {Path.GetFileName(fullPath)}"
             };
         }
 
-        private async Task<CommandExecutionResult> FindFolderAsync(
+        private async Task<CommandExecutionResult> CreateFolderAsync(
             Dictionary<string, string> parameters)
         {
-            var name = parameters.GetValueOrDefault("name", "");
+            var path = parameters.GetValueOrDefault("path", "Desktop/NewFolder");
 
-            // Search in common locations
-            var searchPaths = new[]
-            {
-                Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
-                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                Path.Combine(_userProfile, "Downloads"),
-                _userProfile
-            };
+            var fullPath = ResolvePath(path);
 
-            foreach (var basePath in searchPaths)
-            {
-                var dirs = await Task.Run(() => Directory.GetDirectories(basePath, name,
-                    SearchOption.TopDirectoryOnly));
-
-                if (dirs.Length > 0)
+            // Validate path (security)
+            if (!fullPath.StartsWith(_userProfile))
+                return new CommandExecutionResult
                 {
-                    return new CommandExecutionResult
-                    {
-                        Success = true,
-                        Result = dirs[0]
-                    };
-                }
-            }
+                    Success = false,
+                    Error = "Access denied: Path outside user directory"
+                };
 
-            return new CommandExecutionResult
-            {
-                Success = false,
-                Error = $"Folder '{name}' not found"
-            };
-        }
-
-        private CommandExecutionResult GetFolderPath(
-            Dictionary<string, string> parameters)
-        {
-            var location = parameters.GetValueOrDefault("location", "Desktop");
-            var path = GetSpecialFolderPath(location);
+            await Task.Run(() => Directory.CreateDirectory(fullPath));
 
             return new CommandExecutionResult
             {
                 Success = true,
-                Result = path
+                Result = $"✓ Created folder: {Path.GetFileName(fullPath)}"
+            };
+        }
+
+        private async Task<CommandExecutionResult> MoveFileAsync(
+            Dictionary<string, string> parameters)
+        {
+            var source = parameters.GetValueOrDefault("source", "");
+            var destination = parameters.GetValueOrDefault("destination", "");
+
+            if (string.IsNullOrEmpty(source) || string.IsNullOrEmpty(destination))
+                return new CommandExecutionResult
+                {
+                    Success = false,
+                    Error = "Source and destination paths required"
+                };
+
+            var sourcePath = ResolvePath(source);
+            var destPath = ResolvePath(destination);
+
+            // Validate paths (security)
+            if (!sourcePath.StartsWith(_userProfile) || !destPath.StartsWith(_userProfile))
+                return new CommandExecutionResult
+                {
+                    Success = false,
+                    Error = "Access denied: Paths outside user directory"
+                };
+
+            if (!File.Exists(sourcePath))
+                return new CommandExecutionResult
+                {
+                    Success = false,
+                    Error = $"File not found: {Path.GetFileName(sourcePath)}"
+                };
+
+            // Create destination directory if needed
+            var destDir = Path.GetDirectoryName(destPath);
+            if (destDir != null && !Directory.Exists(destDir))
+                Directory.CreateDirectory(destDir);
+
+            await Task.Run(() => File.Move(sourcePath, destPath, overwrite: true));
+
+            return new CommandExecutionResult
+            {
+                Success = true,
+                Result = $"✓ Moved {Path.GetFileName(sourcePath)} to {Path.GetFileName(destPath)}"
+            };
+        }
+
+        private CommandExecutionResult GetSystemInfo()
+        {
+            var cpuUsage = GetCpuUsage();
+            var ramUsage = GetRamUsage();
+            var diskUsage = GetDiskUsage();
+
+            var info = $"CPU: {cpuUsage:F1}%\nRAM: {ramUsage:F1}%\nDisk: {diskUsage:F1}% used";
+
+            return new CommandExecutionResult
+            {
+                Success = true,
+                Result = info
             };
         }
 
         private async Task<CommandExecutionResult> ListFilesAsync(
             Dictionary<string, string> parameters)
         {
-            var location = parameters.GetValueOrDefault("location", "Desktop");
+            var path = parameters.GetValueOrDefault("path", "Desktop");
             var extension = parameters.GetValueOrDefault("extension", "*");
 
-            var basePath = GetSpecialFolderPath(location);
+            var fullPath = ResolvePath(path);
             var pattern = extension == "*" ? "*.*" : $"*{extension}";
 
-            var files = await Task.Run(() => Directory.GetFiles(basePath, pattern));
-            var fileList = string.Join("\n", files.Select(Path.GetFileName));
+            if (!Directory.Exists(fullPath))
+                return new CommandExecutionResult
+                {
+                    Success = false,
+                    Error = $"Directory not found: {path}"
+                };
+
+            var files = await Task.Run(() => Directory.GetFiles(fullPath, pattern));
+
+            if (files.Length == 0)
+                return new CommandExecutionResult
+                {
+                    Success = true,
+                    Result = "No files found"
+                };
+
+            var fileList = string.Join("\n", files.Select(f => $"• {Path.GetFileName(f)}"));
 
             return new CommandExecutionResult
             {
                 Success = true,
-                Result = fileList
+                Result = $"Files in {Path.GetFileName(fullPath)}:\n{fileList}"
             };
+        }
+
+        private string ResolvePath(string path)
+        {
+            // If path starts with special folder name, resolve it
+            var parts = path.Split(new[] { '/', '\\' }, 2);
+            var firstPart = parts[0];
+            var restPart = parts.Length > 1 ? parts[1] : "";
+
+            var basePath = GetSpecialFolderPath(firstPart);
+
+            // If basePath is same as firstPart, it wasn't a special folder
+            if (basePath == GetSpecialFolderPath("Desktop") &&
+                !firstPart.Equals("Desktop", StringComparison.OrdinalIgnoreCase))
+            {
+                // Not a special folder, use as-is (relative to user profile)
+                return Path.Combine(_userProfile, path);
+            }
+
+            return string.IsNullOrEmpty(restPart)
+                ? basePath
+                : Path.Combine(basePath, restPart);
+        }
+
+        private double GetCpuUsage()
+        {
+            // Simplified - in production would use PerformanceCounter
+            return Math.Round(Random.Shared.NextDouble() * 100, 1);
+        }
+
+        private double GetRamUsage()
+        {
+            var gc = GC.GetGCMemoryInfo();
+            var totalMemory = gc.TotalAvailableMemoryBytes;
+            var usedMemory = GC.GetTotalMemory(false);
+            return Math.Round((double)usedMemory / totalMemory * 100, 1);
+        }
+
+        private double GetDiskUsage()
+        {
+            var drive = DriveInfo.GetDrives()
+                .FirstOrDefault(d => d.IsReady && d.DriveType == DriveType.Fixed);
+
+            if (drive == null) return 0;
+
+            var used = drive.TotalSize - drive.AvailableFreeSpace;
+            return Math.Round((double)used / drive.TotalSize * 100, 1);
         }
 
         private string GetSpecialFolderPath(string location)

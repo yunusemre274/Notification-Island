@@ -24,6 +24,9 @@ namespace NI.Views
         // PHASE 1: Use TopBarStateController as SINGLE SOURCE OF TRUTH
         private TopBarStateController _stateController = TopBarStateController.Instance;
 
+        // AI Router for automatic intent detection
+        private AIRequestRouter? _aiRouter;
+
         // KISS: SINGLE MODE PROPERTY - Delegates to TopBarStateController
         public TopBarMode CurrentMode
         {
@@ -38,6 +41,10 @@ namespace NI.Views
         public bool IsSpotifyPill => _stateController.IsSpotifyPill;
         public bool IsSpotifyExpanded => _stateController.IsSpotifyExpanded;
         public bool IsSearchAnswer => _stateController.IsSearchAnswer;
+        public bool IsAgentProcessing => _stateController.IsAgentProcessing;
+        public bool IsAgentResult => _stateController.IsAgentResult;
+        public bool IsChatProcessing => _stateController.IsChatProcessing;
+        public bool IsChatAnswer => _stateController.IsChatAnswer;
 
         // Panel state
         private PanelType _currentPanel = PanelType.None;
@@ -81,6 +88,10 @@ namespace NI.Views
             // PHASE 1: Subscribe to TopBarStateController mode changes
             _stateController.ModeChanged += OnStateControllerModeChanged;
             _stateController.PropertyChanged += OnStateControllerPropertyChanged;
+
+            // Initialize AI Router
+            var ollamaClient = new OllamaClient();
+            _aiRouter = new AIRequestRouter(ollamaClient);
 
             _vm.Start();
 
@@ -149,12 +160,16 @@ namespace NI.Views
                 return;
             }
 
-            // Priority 2: Search Answer (user is viewing Ollama response)
-            // Note: SearchAnswer is set directly in OnSearchKeyDown, not through UpdateMode
-            // This check ensures we don't override it unless we explicitly call CloseSearchAnswer
-            if (CurrentMode == TopBarMode.SearchAnswer)
+            // Priority 2: Search Answer and AI routing modes (user is viewing responses)
+            // These are set directly in OnSearchKeyDown, not through UpdateMode
+            // This check ensures we don't override them unless explicitly closed
+            if (CurrentMode == TopBarMode.SearchAnswer ||
+                CurrentMode == TopBarMode.AgentProcessing ||
+                CurrentMode == TopBarMode.AgentResult ||
+                CurrentMode == TopBarMode.ChatProcessing ||
+                CurrentMode == TopBarMode.ChatAnswer)
             {
-                return; // Stay in SearchAnswer mode until explicitly closed
+                return; // Stay in current mode until explicitly closed
             }
 
             // Priority 3: Notification (system notification active)
@@ -272,7 +287,7 @@ namespace NI.Views
         }
 
         /// <summary>
-        /// PHASE 4: Handle search input (Enter key)
+        /// ROUTER: Handle search input with automatic intent detection
         /// </summary>
         private async void OnSearchKeyDown(object sender, KeyEventArgs e)
         {
@@ -280,32 +295,190 @@ namespace NI.Views
             {
                 e.Handled = true;
 
-                var question = SearchTextBox.Text.Trim();
+                if (_aiRouter == null)
+                {
+                    System.Diagnostics.Debug.WriteLine("[ROUTER] AI Router not initialized");
+                    return;
+                }
+
+                var userInput = SearchTextBox.Text.Trim();
                 SearchTextBox.Clear();
 
-                // Show SearchAnswer mode with "Thinking..." message
-                SearchQuestionText.Text = question;
-                SearchAnswerText.Text = "Thinking...";
-                _stateController.SetMode(TopBarMode.SearchAnswer);
+                // STEP 1: Determine intent (synchronous, deterministic)
+                var route = _aiRouter.DetermineIntent(userInput);
+                System.Diagnostics.Debug.WriteLine($"[ROUTER] Intent detected: {route.Intent} for input: {userInput}");
 
-                // Call Ollama to get answer
-                var answer = await _vm.GetOllamaAnswerAsync(question);
+                try
+                {
+                    if (route.Intent == IntentType.Agent)
+                    {
+                        // AGENT FLOW: qwen2.5-coder:7b
+                        // UI updates IMMEDIATELY (synchronous)
+                        _stateController.SetMode(TopBarMode.AgentProcessing);
 
-                // Display answer
-                SearchAnswerText.Text = answer;
+                        // Model call runs in background (async)
+                        var rawJson = await _aiRouter.ProcessAgentRequestAsync(userInput);
+                        System.Diagnostics.Debug.WriteLine($"[ROUTER] Agent response: {rawJson}");
+
+                        // Parse and execute command
+                        var result = await ExecuteAgentCommandAsync(rawJson, userInput);
+
+                        // Show result
+                        AgentCommandText.Text = userInput;
+                        AgentResultText.Text = result;
+                        _stateController.SetMode(TopBarMode.AgentResult);
+                    }
+                    else
+                    {
+                        // CHAT FLOW: llama3.1
+                        // UI updates IMMEDIATELY (synchronous)
+                        ChatQuestionText.Text = userInput;
+                        _stateController.SetMode(TopBarMode.ChatProcessing);
+
+                        // Model call runs in background (async)
+                        var answer = await _aiRouter.ProcessChatRequestAsync(userInput);
+                        System.Diagnostics.Debug.WriteLine($"[ROUTER] Chat response: {answer}");
+
+                        // Show answer
+                        ChatAnswerText.Text = answer;
+                        _stateController.SetMode(TopBarMode.ChatAnswer);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[ROUTER] Error: {ex.Message}");
+
+                    // Show friendly error based on flow
+                    if (route.Intent == IntentType.Agent)
+                    {
+                        AgentCommandText.Text = userInput;
+                        AgentResultText.Text = $"Command error: {ex.Message}";
+                        _stateController.SetMode(TopBarMode.AgentResult);
+                    }
+                    else
+                    {
+                        ChatQuestionText.Text = userInput;
+                        ChatAnswerText.Text = $"Error: {ex.Message}";
+                        _stateController.SetMode(TopBarMode.ChatAnswer);
+                    }
+                }
             }
             else if (e.Key == Key.Escape)
             {
-                // ESC closes search answer if open, otherwise clears search box
+                // ESC closes any active card
                 if (CurrentMode == TopBarMode.SearchAnswer)
                 {
                     CloseSearchAnswer();
+                }
+                else if (CurrentMode == TopBarMode.AgentResult)
+                {
+                    CloseAgentResult();
+                }
+                else if (CurrentMode == TopBarMode.ChatAnswer)
+                {
+                    CloseChatAnswer();
                 }
                 else
                 {
                     SearchTextBox.Clear();
                 }
                 e.Handled = true;
+            }
+        }
+
+        /// <summary>
+        /// Execute agent command from JSON response
+        /// </summary>
+        private async Task<string> ExecuteAgentCommandAsync(string rawJson, string originalInput)
+        {
+            try
+            {
+                // Parse JSON directly to get command
+                var command = ParseAgentJsonResponse(rawJson, originalInput);
+
+                if (command.Type == CommandType.Unknown)
+                {
+                    return "Command not understood. Try rephrasing.";
+                }
+
+                // Execute command
+                var executor = new CommandExecutor();
+                var result = await executor.ExecuteAsync(command);
+
+                if (result.Success)
+                {
+                    return result.Result ?? "Command executed successfully.";
+                }
+                else
+                {
+                    return $"Error: {result.Error}";
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ROUTER] Execute error: {ex.Message}");
+                return $"Execution error: {ex.Message}";
+            }
+        }
+
+        /// <summary>
+        /// Parse agent JSON response into ParsedCommand
+        /// </summary>
+        private ParsedCommand ParseAgentJsonResponse(string json, string originalInput)
+        {
+            try
+            {
+                // Clean JSON: remove any text before/after the JSON object
+                var cleanJson = json.Trim();
+                var jsonStart = cleanJson.IndexOf('{');
+                var jsonEnd = cleanJson.LastIndexOf('}');
+
+                if (jsonStart >= 0 && jsonEnd > jsonStart)
+                {
+                    cleanJson = cleanJson.Substring(jsonStart, jsonEnd - jsonStart + 1);
+                }
+
+                using var doc = System.Text.Json.JsonDocument.Parse(cleanJson);
+                var root = doc.RootElement;
+
+                // Get action field (new format)
+                var action = root.GetProperty("action").GetString();
+                var type = action switch
+                {
+                    "create_file" => CommandType.CreateFile,
+                    "create_folder" => CommandType.CreateFolder,
+                    "list_files" => CommandType.ListFiles,
+                    "move_file" => CommandType.MoveFile,
+                    "get_system_info" => CommandType.GetSystemInfo,
+                    "deny" => CommandType.Deny,
+                    _ => CommandType.Unknown
+                };
+
+                // Extract all parameters except "action"
+                var parameters = new System.Collections.Generic.Dictionary<string, string>();
+                foreach (var prop in root.EnumerateObject())
+                {
+                    if (prop.Name != "action")
+                        parameters[prop.Name] = prop.Value.GetString() ?? "";
+                }
+
+                return new ParsedCommand
+                {
+                    Type = type,
+                    Parameters = parameters,
+                    OriginalInput = originalInput
+                };
+            }
+            catch (System.Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ROUTER] JSON parse error: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[ROUTER] Raw JSON: {json}");
+
+                return new ParsedCommand
+                {
+                    Type = CommandType.Unknown,
+                    OriginalInput = originalInput
+                };
             }
         }
 
@@ -329,6 +502,48 @@ namespace NI.Views
 
             // PHASE 1 & 4 REQUIREMENT: Explicitly return to Idle when LLM answer is dismissed
             System.Diagnostics.Debug.WriteLine("[PHASE1/4] CloseSearchAnswer -> Explicit ReturnToIdle()");
+            _stateController.ReturnToIdle();
+        }
+
+        /// <summary>
+        /// Close agent result and return to Idle
+        /// </summary>
+        private void OnCloseAgentResult(object sender, MouseButtonEventArgs e)
+        {
+            e.Handled = true;
+            CloseAgentResult();
+        }
+
+        /// <summary>
+        /// Close agent result - EXPLICIT RETURN TO IDLE
+        /// </summary>
+        private void CloseAgentResult()
+        {
+            AgentCommandText.Text = "";
+            AgentResultText.Text = "";
+
+            System.Diagnostics.Debug.WriteLine("[ROUTER] CloseAgentResult -> Explicit ReturnToIdle()");
+            _stateController.ReturnToIdle();
+        }
+
+        /// <summary>
+        /// Close chat answer and return to Idle
+        /// </summary>
+        private void OnCloseChatAnswer(object sender, MouseButtonEventArgs e)
+        {
+            e.Handled = true;
+            CloseChatAnswer();
+        }
+
+        /// <summary>
+        /// Close chat answer - EXPLICIT RETURN TO IDLE
+        /// </summary>
+        private void CloseChatAnswer()
+        {
+            ChatQuestionText.Text = "";
+            ChatAnswerText.Text = "";
+
+            System.Diagnostics.Debug.WriteLine("[ROUTER] CloseChatAnswer -> Explicit ReturnToIdle()");
             _stateController.ReturnToIdle();
         }
 
@@ -560,6 +775,34 @@ namespace NI.Views
 
                 case TopBarMode.SearchAnswer:
                     // CANVAS SPEC: 420x220px (max), radius 24px
+                    targetWidth = 420;
+                    targetHeight = 220;
+                    targetCornerRadius = 24;
+                    break;
+
+                case TopBarMode.AgentProcessing:
+                    // Agent processing indicator: same as idle but with loading content
+                    targetWidth = 420;
+                    targetHeight = 48;
+                    targetCornerRadius = 24;
+                    break;
+
+                case TopBarMode.AgentResult:
+                    // Agent result card: same as SearchAnswer
+                    targetWidth = 420;
+                    targetHeight = 220;
+                    targetCornerRadius = 24;
+                    break;
+
+                case TopBarMode.ChatProcessing:
+                    // Chat processing indicator: same as idle but with loading content
+                    targetWidth = 420;
+                    targetHeight = 48;
+                    targetCornerRadius = 24;
+                    break;
+
+                case TopBarMode.ChatAnswer:
+                    // Chat answer card: same as SearchAnswer
                     targetWidth = 420;
                     targetHeight = 220;
                     targetCornerRadius = 24;

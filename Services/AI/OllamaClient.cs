@@ -1,3 +1,4 @@
+using NI.Services.AI;
 using System;
 using System.Diagnostics;
 using System.Net;
@@ -5,6 +6,7 @@ using System.Net.Http;
 using System.Net.Http.Json;
 using System.Threading;
 using System.Threading.Tasks;
+
 
 namespace NI.Services.AI
 {
@@ -78,6 +80,71 @@ namespace NI.Services.AI
                 throw new OllamaException(HttpStatusCode.RequestTimeout, "Ollama request timed out", ex);
             }
         }
+        /// <summary>
+/// AGENT MODE: Uses AgentPrompt system rules and returns RAW JSON
+/// </summary>
+public async Task<string> GenerateAgentAsync(string userInput,
+                                             CancellationToken ct = default)
+{
+    if (string.IsNullOrWhiteSpace(userInput))
+        throw new ArgumentException("User input cannot be empty", nameof(userInput));
+
+    var fullPrompt =
+        AgentPrompt.SystemPrompt +
+        "\nUser: " + userInput;
+
+    return await GenerateAsync(fullPrompt, ct);
+}
+
+        /// <summary>
+        /// CHAT MODE: Uses llama3.1 model for conversational responses
+        /// </summary>
+        public async Task<string> GenerateChatAsync(string userInput,
+                                                     CancellationToken ct = default)
+        {
+            if (string.IsNullOrWhiteSpace(userInput))
+                throw new ArgumentException("User input cannot be empty", nameof(userInput));
+
+            try
+            {
+                Debug.WriteLine($"[CHAT] Chat request: {userInput}");
+
+                var request = new
+                {
+                    model = "llama3.1",
+                    prompt = userInput,
+                    stream = false
+                };
+
+                var response = await _httpClient.PostAsJsonAsync(
+                    $"{_baseUrl}/api/generate",
+                    request,
+                    ct);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    Debug.WriteLine($"[CHAT] Ollama HTTP error: {response.StatusCode}");
+                    throw new OllamaException(response.StatusCode, "Ollama API request failed");
+                }
+
+                var result = await response.Content.ReadFromJsonAsync<OllamaResponse>(cancellationToken: ct);
+                var answer = result?.Response ?? string.Empty;
+
+                Debug.WriteLine($"[CHAT] Chat response length: {answer.Length} chars");
+                return answer;
+            }
+            catch (HttpRequestException ex)
+            {
+                Debug.WriteLine($"[CHAT] Ollama connection error: {ex.Message}");
+                throw new OllamaException(HttpStatusCode.ServiceUnavailable, "Cannot connect to Ollama", ex);
+            }
+            catch (TaskCanceledException ex)
+            {
+                Debug.WriteLine($"[CHAT] Ollama timeout: {ex.Message}");
+                throw new OllamaException(HttpStatusCode.RequestTimeout, "Ollama request timed out", ex);
+            }
+        }
+
 
         /// <summary>
         /// CRITICAL: Check if Ollama is installed and running, auto-start if needed

@@ -60,6 +60,10 @@ namespace NI.Core
                     OnPropertyChanged(nameof(IsSpotifyPill));
                     OnPropertyChanged(nameof(IsSpotifyExpanded));
                     OnPropertyChanged(nameof(IsSearchAnswer));
+                    OnPropertyChanged(nameof(IsAgentProcessing));
+                    OnPropertyChanged(nameof(IsAgentResult));
+                    OnPropertyChanged(nameof(IsChatProcessing));
+                    OnPropertyChanged(nameof(IsChatAnswer));
 
                     // Notify subscribers
                     ModeChanged?.Invoke(this, _currentMode);
@@ -74,6 +78,10 @@ namespace NI.Core
         public bool IsSpotifyPill => CurrentMode == TopBarMode.SpotifyPill;
         public bool IsSpotifyExpanded => CurrentMode == TopBarMode.SpotifyExpanded;
         public bool IsSearchAnswer => CurrentMode == TopBarMode.SearchAnswer;
+        public bool IsAgentProcessing => CurrentMode == TopBarMode.AgentProcessing;
+        public bool IsAgentResult => CurrentMode == TopBarMode.AgentResult;
+        public bool IsChatProcessing => CurrentMode == TopBarMode.ChatProcessing;
+        public bool IsChatAnswer => CurrentMode == TopBarMode.ChatAnswer;
 
         /// <summary>
         /// Event fired when mode changes
@@ -112,14 +120,24 @@ namespace NI.Core
         /// </summary>
         public bool CanTransitionTo(TopBarMode newMode)
         {
-            // ControlPanel and SearchAnswer cannot be overridden (user initiated)
-            if (CurrentMode == TopBarMode.ControlPanel || CurrentMode == TopBarMode.SearchAnswer)
+            // ControlPanel, SearchAnswer, and AI routing modes cannot be overridden (user initiated)
+            if (CurrentMode == TopBarMode.ControlPanel ||
+                CurrentMode == TopBarMode.SearchAnswer ||
+                CurrentMode == TopBarMode.AgentProcessing ||
+                CurrentMode == TopBarMode.AgentResult ||
+                CurrentMode == TopBarMode.ChatProcessing ||
+                CurrentMode == TopBarMode.ChatAnswer)
             {
                 // Only allow transition if explicitly returning to Idle or same priority
                 if (newMode == TopBarMode.Idle)
                     return true;
 
-                if (newMode == TopBarMode.ControlPanel || newMode == TopBarMode.SearchAnswer)
+                if (newMode == TopBarMode.ControlPanel ||
+                    newMode == TopBarMode.SearchAnswer ||
+                    newMode == TopBarMode.AgentProcessing ||
+                    newMode == TopBarMode.AgentResult ||
+                    newMode == TopBarMode.ChatProcessing ||
+                    newMode == TopBarMode.ChatAnswer)
                     return true;
 
                 return false; // Block lower priority transitions
@@ -174,6 +192,26 @@ namespace NI.Core
         /// <summary>
         /// Search answer displayed (Large black card with Ollama response)
         /// </summary>
-        SearchAnswer
+        SearchAnswer,
+
+        /// <summary>
+        /// Agent command processing (shows loading indicator)
+        /// </summary>
+        AgentProcessing,
+
+        /// <summary>
+        /// Agent command result (shows execution result)
+        /// </summary>
+        AgentResult,
+
+        /// <summary>
+        /// Chat request processing (shows loading indicator)
+        /// </summary>
+        ChatProcessing,
+
+        /// <summary>
+        /// Chat answer displayed (shows conversational response)
+        /// </summary>
+        ChatAnswer
     }
 }

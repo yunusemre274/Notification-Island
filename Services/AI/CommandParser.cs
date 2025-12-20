@@ -8,10 +8,11 @@ namespace NI.Services.AI
     public enum CommandType
     {
         CreateFile,
-        FindFolder,
-        GetFolderPath,
+        CreateFolder,
         ListFiles,
-        OpenApplication,
+        MoveFile,
+        GetSystemInfo,
+        Deny,
         Unknown
     }
 
@@ -67,20 +68,22 @@ Response: {""command"": ""FIND_FOLDER"", ""name"": ""Projects""}
                 using var doc = JsonDocument.Parse(json);
                 var root = doc.RootElement;
 
-                var command = root.GetProperty("command").GetString();
-                var type = command switch
+                var action = root.GetProperty("action").GetString();
+                var type = action switch
                 {
-                    "CREATE_FILE" => CommandType.CreateFile,
-                    "FIND_FOLDER" => CommandType.FindFolder,
-                    "GET_PATH" => CommandType.GetFolderPath,
-                    "LIST_FILES" => CommandType.ListFiles,
+                    "create_file" => CommandType.CreateFile,
+                    "create_folder" => CommandType.CreateFolder,
+                    "list_files" => CommandType.ListFiles,
+                    "move_file" => CommandType.MoveFile,
+                    "get_system_info" => CommandType.GetSystemInfo,
+                    "deny" => CommandType.Deny,
                     _ => CommandType.Unknown
                 };
 
                 var parameters = new Dictionary<string, string>();
                 foreach (var prop in root.EnumerateObject())
                 {
-                    if (prop.Name != "command")
+                    if (prop.Name != "action")
                         parameters[prop.Name] = prop.Value.GetString() ?? "";
                 }
 

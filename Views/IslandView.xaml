@@ -617,6 +617,165 @@
                         </StackPanel>
                     </Border>
                 </Grid>
+
+                <!-- AGENT PROCESSING MODE - Loading indicator -->
+                <Grid x:Name="AgentProcessingContent"
+                      Visibility="{Binding IsAgentProcessing, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="Düşünüyor..."
+                               FontFamily="Segoe UI"
+                               FontSize="14"
+                               FontWeight="Medium"
+                               Foreground="#FFFFFF"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"/>
+                </Grid>
+
+                <!-- AGENT RESULT MODE - Command execution result -->
+                <Grid x:Name="AgentResultContent"
+                      Visibility="{Binding IsAgentResult, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>  <!-- Header -->
+                        <RowDefinition Height="*"/>     <!-- Result text -->
+                        <RowDefinition Height="Auto"/>  <!-- Close button -->
+                    </Grid.RowDefinitions>
+
+                    <!-- Header: Command executed -->
+                    <StackPanel Grid.Row="0" Margin="0,0,0,12">
+                        <TextBlock Text="✓"
+                                   FontSize="20"
+                                   HorizontalAlignment="Left"
+                                   Foreground="#1DB954"
+                                   Margin="0,0,0,6"/>
+                        <TextBlock x:Name="AgentCommandText"
+                                   Text="Command executed"
+                                   FontFamily="Segoe UI"
+                                   FontSize="12"
+                                   FontWeight="SemiBold"
+                                   Foreground="#B3FFFFFF"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="410"/>
+                    </StackPanel>
+
+                    <!-- Result Text (scrollable) -->
+                    <ScrollViewer Grid.Row="1"
+                                  VerticalScrollBarVisibility="Auto"
+                                  MaxHeight="140">
+                        <TextBlock x:Name="AgentResultText"
+                                   Text="Result..."
+                                   FontFamily="Segoe UI"
+                                   FontSize="13"
+                                   FontWeight="Normal"
+                                   Foreground="#FFFFFF"
+                                   TextWrapping="Wrap"
+                                   LineHeight="20"
+                                   MaxWidth="410"/>
+                    </ScrollViewer>
+
+                    <!-- Close Button -->
+                    <Border Grid.Row="2"
+                            Background="#20FFFFFF"
+                            CornerRadius="8"
+                            Padding="12,6"
+                            HorizontalAlignment="Right"
+                            Margin="0,12,0,0"
+                            Cursor="Hand"
+                            MouseLeftButtonDown="OnCloseAgentResult">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="ESC"
+                                       FontFamily="Segoe UI"
+                                       FontSize="10"
+                                       FontWeight="SemiBold"
+                                       Foreground="#80FFFFFF"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,6,0"/>
+                            <TextBlock Text="Close"
+                                       FontFamily="Segoe UI"
+                                       FontSize="11"
+                                       FontWeight="Medium"
+                                       Foreground="#FFFFFF"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <!-- CHAT PROCESSING MODE - Loading indicator -->
+                <Grid x:Name="ChatProcessingContent"
+                      Visibility="{Binding IsChatProcessing, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="Düşünüyor..."
+                               FontFamily="Segoe UI"
+                               FontSize="14"
+                               FontWeight="Medium"
+                               Foreground="#FFFFFF"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"/>
+                </Grid>
+
+                <!-- CHAT ANSWER MODE - Conversational response -->
+                <Grid x:Name="ChatAnswerContent"
+                      Visibility="{Binding IsChatAnswer, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>  <!-- Header -->
+                        <RowDefinition Height="*"/>     <!-- Answer text -->
+                        <RowDefinition Height="Auto"/>  <!-- Close button -->
+                    </Grid.RowDefinitions>
+
+                    <!-- Header: Question -->
+                    <StackPanel Grid.Row="0" Margin="0,0,0,12">
+                        <TextBlock Text="💬"
+                                   FontSize="20"
+                                   HorizontalAlignment="Left"
+                                   Margin="0,0,0,6"/>
+                        <TextBlock x:Name="ChatQuestionText"
+                                   Text="Your question"
+                                   FontFamily="Segoe UI"
+                                   FontSize="12"
+                                   FontWeight="SemiBold"
+                                   Foreground="#B3FFFFFF"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="410"/>
+                    </StackPanel>
+
+                    <!-- Answer Text (scrollable) -->
+                    <ScrollViewer Grid.Row="1"
+                                  VerticalScrollBarVisibility="Auto"
+                                  MaxHeight="140">
+                        <TextBlock x:Name="ChatAnswerText"
+                                   Text="Thinking..."
+                                   FontFamily="Segoe UI"
+                                   FontSize="13"
+                                   FontWeight="Normal"
+                                   Foreground="#FFFFFF"
+                                   TextWrapping="Wrap"
+                                   LineHeight="20"
+                                   MaxWidth="410"/>
+                    </ScrollViewer>
+
+                    <!-- Close Button -->
+                    <Border Grid.Row="2"
+                            Background="#20FFFFFF"
+                            CornerRadius="8"
+                            Padding="12,6"
+                            HorizontalAlignment="Right"
+                            Margin="0,12,0,0"
+                            Cursor="Hand"
+                            MouseLeftButtonDown="OnCloseChatAnswer">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="ESC"
+                                       FontFamily="Segoe UI"
+                                       FontSize="10"
+                                       FontWeight="SemiBold"
+                                       Foreground="#80FFFFFF"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,6,0"/>
+                            <TextBlock Text="Close"
+                                       FontFamily="Segoe UI"
+                                       FontSize="11"
+                                       FontWeight="Medium"
+                                       Foreground="#FFFFFF"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
             </Grid>
         </Border>
 
