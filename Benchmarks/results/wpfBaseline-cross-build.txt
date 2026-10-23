@@ -1,0 +1,9 @@
+  Geri yüklenecek projeler belirleniyor...
+  /Users/yunusemre/Desktop/Notification-Island/Benchmarks/WpfBaseline/WpfBaseline.csproj geri yüklendi (918 ms içinde).
+  WpfBaseline -> /tmp/ni-agent-delivery-baseline/bin/WpfBaseline/release/WpfBaseline.dll
+
+Oluşturma başarılı oldu.
+    0 Uyarı
+    0 Hata
+
+Geçen Süre 00:00:01.47

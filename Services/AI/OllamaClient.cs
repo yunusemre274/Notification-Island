@@ -40,7 +40,7 @@ namespace NI.Services.AI
         {
             try
             {
-                Debug.WriteLine($"[PHASE4] Ollama request: {prompt}");
+                Debug.WriteLine("[Ollama] Generation requested");
 
                 var request = new
                 {
@@ -49,7 +49,7 @@ namespace NI.Services.AI
                     stream = false
                 };
 
-                var response = await _httpClient.PostAsJsonAsync(
+                using var response = await _httpClient.PostAsJsonAsync(
                     $"{_baseUrl}/api/generate",
                     request,
                     ct);
@@ -73,6 +73,7 @@ namespace NI.Services.AI
                 Debug.WriteLine($"[PHASE4] Ollama connection error: {ex.Message}");
                 throw new OllamaException(HttpStatusCode.ServiceUnavailable, "Cannot connect to Ollama", ex);
             }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
             catch (TaskCanceledException ex)
             {
                 // PHASE 4: Timeout
@@ -96,55 +97,12 @@ public async Task<string> GenerateAgentAsync(string userInput,
     return await GenerateAsync(fullPrompt, ct);
 }
 
-        /// <summary>
-        /// CHAT MODE: Uses llama3.1 model for conversational responses
-        /// </summary>
-        public async Task<string> GenerateChatAsync(string userInput,
-                                                     CancellationToken ct = default)
+        // Both chat and agent requests honor the configured model.
+        public Task<string> GenerateChatAsync(string userInput, CancellationToken ct = default)
         {
-            if (string.IsNullOrWhiteSpace(userInput))
-                throw new ArgumentException("User input cannot be empty", nameof(userInput));
-
-            try
-            {
-                Debug.WriteLine($"[CHAT] Chat request: {userInput}");
-
-                var request = new
-                {
-                    model = "llama3.1",
-                    prompt = userInput,
-                    stream = false
-                };
-
-                var response = await _httpClient.PostAsJsonAsync(
-                    $"{_baseUrl}/api/generate",
-                    request,
-                    ct);
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    Debug.WriteLine($"[CHAT] Ollama HTTP error: {response.StatusCode}");
-                    throw new OllamaException(response.StatusCode, "Ollama API request failed");
-                }
-
-                var result = await response.Content.ReadFromJsonAsync<OllamaResponse>(cancellationToken: ct);
-                var answer = result?.Response ?? string.Empty;
-
-                Debug.WriteLine($"[CHAT] Chat response length: {answer.Length} chars");
-                return answer;
-            }
-            catch (HttpRequestException ex)
-            {
-                Debug.WriteLine($"[CHAT] Ollama connection error: {ex.Message}");
-                throw new OllamaException(HttpStatusCode.ServiceUnavailable, "Cannot connect to Ollama", ex);
-            }
-            catch (TaskCanceledException ex)
-            {
-                Debug.WriteLine($"[CHAT] Ollama timeout: {ex.Message}");
-                throw new OllamaException(HttpStatusCode.RequestTimeout, "Ollama request timed out", ex);
-            }
+            if (string.IsNullOrWhiteSpace(userInput)) throw new ArgumentException("User input cannot be empty", nameof(userInput));
+            return GenerateAsync(userInput, ct);
         }
-
 
         /// <summary>
         /// CRITICAL: Check if Ollama is installed and running, auto-start if needed
@@ -289,7 +247,7 @@ public async Task<string> GenerateAgentAsync(string userInput,
             try
             {
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                var response = await _httpClient.GetAsync($"{_baseUrl}/api/tags", cts.Token);
+                using var response = await _httpClient.GetAsync($"{_baseUrl}/api/tags", cts.Token);
                 return response.IsSuccessStatusCode;
             }
             catch

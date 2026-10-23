@@ -9,13 +9,21 @@
     <StartupObject>NI.Program</StartupObject>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**;Tests/**;Benchmarks/**</DefaultItemExcludes>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Retain legacy source for reference, but do not ship unsafe prototype execution paths. -->
+    <Compile Remove="Services/AI/**/*.cs" />
+    <Compile Remove="Services/AiAssistantService.cs" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- NAudio for Core Audio API access -->
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="System.Management" Version="10.0.0" />
-    <PackageReference Include="System.Text.Json" Version="10.0.1" />
+    <PackageReference Include="System.Diagnostics.PerformanceCounter" Version="8.0.1" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "recordedAtUtc": "2026-10-23T14:23:34.110252+00:00",
+  "headCommit": "094c548d4aecbf9701fcf8aa5bcd7d29a57ba8a5",
+  "dirtyTree": true,
+  "codeTreeSha256": "0717dd63ddcfb5be566658c44176167797b1ba8671364b2d6a189e3597d19fe0",
+  "host": {
+    "system": "Darwin",
+    "architecture": "arm64",
+    "dotnetSdk": "10.0.301",
+    "testRuntime": "10.0.9",
+    "productTarget": "net8.0-windows10.0.19041.0"
+  },
+  "agentTests": {
+    "passed": 36,
+    "failed": 0,
+    "fixtureOnly": true,
+    "realDesktopTouched": false,
+    "osScheduler": "fake"
+  },
+  "coreRegressionTests": {
+    "passed": 16,
+    "failed": 0
+  },
+  "releaseCrossBuilds": {
+    "wpfAndWindowsLayout": {
+      "errors": 0,
+      "warnings": 0,
+      "executedOnWindows": false
+    },
+    "collector": {
+      "errors": 0,
+      "warnings": 0,
+      "executedOnWindows": false
+    },
+    "wpfBaseline": {
+      "errors": 0,
+      "warnings": 0,
+      "executedOnWindows": false
+    }
+  },
+  "liveOllama": {
+    "status": "NOT_RUN",
+    "reason": "No running local server; no model downloaded or server started",
+    "installedCliVersion": "0.30.8"
+  },
+  "windowsPerformance": {
+    "status": "UNVERIFIED",
+    "budgetPrivateBytes": 20000000,
+    "normalPrivateBytesAverage": null,
+    "normalPrivateBytesP95": null,
+    "normalPrivateBytesPeak": null,
+    "privateWorkingSet": null,
+    "totalWorkingSet": null,
+    "gpuDedicatedBytes": null,
+    "gpuSharedBytes": null,
+    "idleCpuNormalizedPercent": null,
+    "aiRecoveryWithin30Seconds": null
+  },
+  "windowsAlarmAndNativeFileAdapter": "IMPLEMENTED_NOT_EXECUTED",
+  "nativePrototype": "SOURCE_ONLY_NOT_BUILT_OR_MEASURED"
+}

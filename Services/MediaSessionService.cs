@@ -1,296 +1,153 @@
-using System;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using NI.Services.Media;
 using Windows.Media.Control;
-using Windows.Storage.Streams;
 
-namespace NI.Services
+namespace NI.Services;
+
+public sealed class MediaSessionService : IMediaService
 {
-    /// <summary>
-    /// MediaSessionService with album artwork, position tracking, and playback controls
-    /// </summary>
-    public class MediaSessionService : IDisposable
+    private readonly Dispatcher _dispatcher;
+    private readonly DispatcherTimer _timer;
+    private GlobalSystemMediaTransportControlsSessionManager? _manager;
+    private GlobalSystemMediaTransportControlsSession? _session;
+    private bool _disposed, _progressVisible;
+    private long _generation;
+    public bool HasSession => _session != null;
+    public bool IsPlaying { get; private set; }
+    public string TrackTitle { get; private set; } = "";
+    public string ArtistName { get; private set; } = "";
+    public BitmapImage? AlbumArtwork { get; private set; }
+    public TimeSpan CurrentPosition { get; private set; }
+    public TimeSpan TotalDuration { get; private set; }
+    public event EventHandler? Changed;
+
+    public MediaSessionService()
     {
-        public bool IsSpotifyPlaying { get; private set; }
-        public string TrackTitle { get; private set; } = "";
-        public string ArtistName { get; private set; } = "";
-        public BitmapImage? AlbumArtwork { get; private set; }
-        public TimeSpan CurrentPosition { get; private set; }
-        public TimeSpan TotalDuration { get; private set; }
-
-        public event EventHandler<bool>? PlaybackStateChanged;
-        public event EventHandler? MediaPropertiesChanged;
-        public event EventHandler? PositionChanged;
-
-        private GlobalSystemMediaTransportControlsSessionManager? _sessionManager;
-        private GlobalSystemMediaTransportControlsSession? _currentSession;
-        private DispatcherTimer? _positionTimer;
-
-        public async Task InitializeAsync()
+        _dispatcher = Dispatcher.CurrentDispatcher;
+        _timer = new DispatcherTimer(DispatcherPriority.Background, _dispatcher) { Interval = TimeSpan.FromSeconds(1) };
+        _timer.Tick += OnTick;
+    }
+    public async Task InitializeAsync()
+    {
+        try
         {
-            try
-            {
-                _sessionManager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
-                _sessionManager.SessionsChanged += OnSessionsChanged;
-                await UpdateCurrentSessionAsync();
-
-                // Start position timer (updates every second when playing)
-                _positionTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-                _positionTimer.Tick += OnPositionTimerTick;
-                _positionTimer.Start();
-
-                Debug.WriteLine("[MediaSessionService] Initialized");
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[MediaSessionService] Init failed: {ex.Message}");
-            }
+            var manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
+            if (_disposed) return;
+            _manager = manager;
+            _manager.SessionsChanged += OnSessionsChanged;
+            _manager.CurrentSessionChanged += OnCurrentChanged;
+            await SelectSessionAsync();
         }
-
-        private async Task UpdateCurrentSessionAsync()
+        catch (Exception ex) { Debug.WriteLine($"Media unavailable: {ex.Message}"); }
+    }
+    private async Task SelectSessionAsync()
+    {
+        if (_disposed || _manager == null) return;
+        DetachSession();
+        var sessions = _manager.GetSessions();
+        _session = _manager.GetCurrentSession() ?? sessions.FirstOrDefault();
+        if (_session != null)
         {
-            try
-            {
-                if (_sessionManager == null) return;
-
-                // Unsubscribe from old session
-                if (_currentSession != null)
-                {
-                    _currentSession.MediaPropertiesChanged -= OnMediaPropertiesChanged;
-                    _currentSession.PlaybackInfoChanged -= OnPlaybackInfoChanged;
-                }
-
-                // SIMPLE: Enumerate ALL sessions, pick Spotify
-                var sessions = _sessionManager.GetSessions();
-                _currentSession = sessions.FirstOrDefault(s =>
-                    s.SourceAppUserModelId.Contains("Spotify", StringComparison.OrdinalIgnoreCase));
-
-                if (_currentSession != null)
-                {
-                    Debug.WriteLine($"[MediaSessionService] Spotify found: {_currentSession.SourceAppUserModelId}");
-
-                    // Subscribe to events
-                    _currentSession.MediaPropertiesChanged += OnMediaPropertiesChanged;
-                    _currentSession.PlaybackInfoChanged += OnPlaybackInfoChanged;
-
-                    // Get initial state
-                    var playbackInfo = _currentSession.GetPlaybackInfo();
-                    IsSpotifyPlaying = playbackInfo.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing;
-
-                    // Get track info
-                    var mediaProps = await _currentSession.TryGetMediaPropertiesAsync();
-                    if (mediaProps != null)
-                    {
-                        TrackTitle = mediaProps.Title ?? "";
-                        ArtistName = mediaProps.Artist ?? "";
-
-                        // Get album artwork
-                        await LoadAlbumArtworkAsync(mediaProps);
-
-                        Debug.WriteLine($"[MediaSessionService] Track: {TrackTitle} by {ArtistName}");
-                    }
-
-                    // Get timeline properties for duration
-                    var timeline = _currentSession.GetTimelineProperties();
-                    CurrentPosition = timeline.Position;
-                    TotalDuration = timeline.EndTime;
-                }
-                else
-                {
-                    Debug.WriteLine("[MediaSessionService] No Spotify session");
-                    IsSpotifyPlaying = false;
-                    TrackTitle = "";
-                    ArtistName = "";
-                    AlbumArtwork = null;
-                    CurrentPosition = TimeSpan.Zero;
-                    TotalDuration = TimeSpan.Zero;
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[MediaSessionService] UpdateSession failed: {ex.Message}");
-            }
+            _session.MediaPropertiesChanged += OnMediaChanged;
+            _session.PlaybackInfoChanged += OnPlaybackChanged;
+            _session.TimelinePropertiesChanged += OnTimelineChanged;
         }
-
-        private async void OnSessionsChanged(GlobalSystemMediaTransportControlsSessionManager sender, SessionsChangedEventArgs args)
+        await RefreshAsync();
+    }
+    private async Task RefreshAsync()
+    {
+        var generation = ++_generation;
+        var session = _session;
+        try
         {
-            Debug.WriteLine("[MediaSessionService] Sessions changed");
-            await UpdateCurrentSessionAsync();
-        }
-
-        private async void OnMediaPropertiesChanged(GlobalSystemMediaTransportControlsSession sender, Windows.Media.Control.MediaPropertiesChangedEventArgs args)
-        {
-            try
+            if (session == null)
             {
-                var mediaProps = await sender.TryGetMediaPropertiesAsync();
-                if (mediaProps != null)
-                {
-                    TrackTitle = mediaProps.Title ?? "";
-                    ArtistName = mediaProps.Artist ?? "";
-
-                    // Get album artwork
-                    await LoadAlbumArtworkAsync(mediaProps);
-
-                    // Get timeline properties for duration
-                    var timeline = sender.GetTimelineProperties();
-                    CurrentPosition = timeline.Position;
-                    TotalDuration = timeline.EndTime;
-
-                    Debug.WriteLine($"[MediaSessionService] Track changed: {TrackTitle}");
-                    MediaPropertiesChanged?.Invoke(this, EventArgs.Empty);
-                }
+                TrackTitle = ArtistName = ""; AlbumArtwork = null;
+                CurrentPosition = TotalDuration = TimeSpan.Zero; IsPlaying = false;
             }
-            catch (Exception ex)
+            else
             {
-                Debug.WriteLine($"[MediaSessionService] MediaPropertiesChanged failed: {ex.Message}");
-            }
-        }
-
-        private void OnPlaybackInfoChanged(GlobalSystemMediaTransportControlsSession sender, PlaybackInfoChangedEventArgs args)
-        {
-            try
-            {
-                var wasPlaying = IsSpotifyPlaying;
-                IsSpotifyPlaying = sender.GetPlaybackInfo().PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing;
-
-                if (wasPlaying != IsSpotifyPlaying)
-                {
-                    Debug.WriteLine($"[MediaSessionService] Playback: {(IsSpotifyPlaying ? "Playing" : "Paused")}");
-                    PlaybackStateChanged?.Invoke(this, IsSpotifyPlaying);
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[MediaSessionService] PlaybackInfoChanged failed: {ex.Message}");
-            }
-        }
-
-        public async Task<bool> TogglePlayPauseAsync()
-        {
-            try
-            {
-                if (_currentSession == null) return false;
-
-                if (IsSpotifyPlaying)
-                {
-                    return await _currentSession.TryPauseAsync();
-                }
-                else
-                {
-                    return await _currentSession.TryPlayAsync();
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[MediaSessionService] TogglePlayPause failed: {ex.Message}");
-                return false;
-            }
-        }
-
-        public async Task<bool> TrySkipPreviousAsync()
-        {
-            try
-            {
-                if (_currentSession == null) return false;
-                return await _currentSession.TrySkipPreviousAsync();
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[MediaSessionService] SkipPrevious failed: {ex.Message}");
-                return false;
-            }
-        }
-
-        public async Task<bool> TrySkipNextAsync()
-        {
-            try
-            {
-                if (_currentSession == null) return false;
-                return await _currentSession.TrySkipNextAsync();
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[MediaSessionService] SkipNext failed: {ex.Message}");
-                return false;
-            }
-        }
-
-        private async Task LoadAlbumArtworkAsync(GlobalSystemMediaTransportControlsSessionMediaProperties mediaProps)
-        {
-            try
-            {
-                if (mediaProps.Thumbnail == null)
-                {
-                    AlbumArtwork = null;
-                    return;
-                }
-
-                using (var stream = await mediaProps.Thumbnail.OpenReadAsync())
-                {
-                    var bitmap = new BitmapImage();
-                    await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
-                    {
-                        bitmap.BeginInit();
-                        bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                        bitmap.StreamSource = stream.AsStreamForRead();
-                        bitmap.EndInit();
-                        bitmap.Freeze();
-                        AlbumArtwork = bitmap;
-                    });
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[MediaSessionService] LoadAlbumArtwork failed: {ex.Message}");
+                var properties = await session.TryGetMediaPropertiesAsync();
+                if (_disposed || generation != _generation) return;
+                TrackTitle = properties.Title ?? ""; ArtistName = properties.Artist ?? "";
                 AlbumArtwork = null;
-            }
-        }
-
-        private void OnPositionTimerTick(object? sender, EventArgs e)
-        {
-            try
-            {
-                if (_currentSession == null || !IsSpotifyPlaying)
-                    return;
-
-                var timeline = _currentSession.GetTimelineProperties();
-                CurrentPosition = timeline.Position;
-                TotalDuration = timeline.EndTime;
-
-                PositionChanged?.Invoke(this, EventArgs.Empty);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[MediaSessionService] PositionTimer failed: {ex.Message}");
-            }
-        }
-
-        public void Dispose()
-        {
-            try
-            {
-                _positionTimer?.Stop();
-                _positionTimer = null;
-
-                if (_sessionManager != null)
+                if (_progressVisible && properties.Thumbnail != null)
                 {
-                    _sessionManager.SessionsChanged -= OnSessionsChanged;
+                    using var stream = await properties.Thumbnail.OpenReadAsync();
+                    if (_disposed || generation != _generation) return;
+                    if (stream.Size <= 524288)
+                    {
+                    var image = new BitmapImage();
+                    image.BeginInit(); image.CacheOption = BitmapCacheOption.OnLoad;
+                    image.DecodePixelWidth = 96; image.DecodePixelHeight = 96; image.StreamSource = stream.AsStreamForRead();
+                    image.EndInit(); image.Freeze(); AlbumArtwork = image;
+                    }
                 }
-
-                if (_currentSession != null)
-                {
-                    _currentSession.MediaPropertiesChanged -= OnMediaPropertiesChanged;
-                    _currentSession.PlaybackInfoChanged -= OnPlaybackInfoChanged;
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[MediaSessionService] Dispose failed: {ex.Message}");
+                IsPlaying = session.GetPlaybackInfo().PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing;
+                ReadTimeline();
             }
         }
+        catch (Exception ex) { Debug.WriteLine($"Media refresh: {ex.Message}"); }
+        if (_disposed || generation != _generation) return;
+        UpdateTimer(); Changed?.Invoke(this, EventArgs.Empty);
+    }
+    private void ReadTimeline()
+    {
+        if (_session == null) return;
+        var timeline = _session.GetTimelineProperties();
+        TotalDuration = timeline.EndTime - timeline.StartTime;
+        var position = timeline.Position - timeline.StartTime;
+        if (IsPlaying) position += DateTimeOffset.Now - timeline.LastUpdatedTime;
+        CurrentPosition = TimeSpan.FromSeconds(Math.Clamp(position.TotalSeconds, 0, Math.Max(0, TotalDuration.TotalSeconds)));
+    }
+    private void OnTick(object? sender, EventArgs e)
+    {
+        try { ReadTimeline(); Changed?.Invoke(this, EventArgs.Empty); }
+        catch (Exception ex) { Debug.WriteLine($"Media timeline: {ex.Message}"); }
+    }
+    private void Queue(Func<Task> work) => _dispatcher.BeginInvoke(new Action(async () =>
+    {
+        if (_disposed) return;
+        try { await work(); } catch (Exception ex) { Debug.WriteLine($"Media event: {ex.Message}"); }
+    }));
+    private void OnSessionsChanged(GlobalSystemMediaTransportControlsSessionManager sender, SessionsChangedEventArgs args) => Queue(SelectSessionAsync);
+    private void OnCurrentChanged(GlobalSystemMediaTransportControlsSessionManager sender, CurrentSessionChangedEventArgs args) => Queue(SelectSessionAsync);
+    private void OnMediaChanged(GlobalSystemMediaTransportControlsSession sender, MediaPropertiesChangedEventArgs args) => Queue(RefreshAsync);
+    private void OnPlaybackChanged(GlobalSystemMediaTransportControlsSession sender, PlaybackInfoChangedEventArgs args) => Queue(RefreshAsync);
+    private void OnTimelineChanged(GlobalSystemMediaTransportControlsSession sender, TimelinePropertiesChangedEventArgs args) => Queue(() => { OnTick(null, EventArgs.Empty); return Task.CompletedTask; });
+    public void SetProgressVisible(bool visible)
+    {
+        if (_progressVisible == visible) return;
+        _progressVisible = visible; UpdateTimer();
+        if (visible && HasSession) Queue(RefreshAsync);
+        else if (!visible && AlbumArtwork != null) { AlbumArtwork = null; Changed?.Invoke(this, EventArgs.Empty); }
+    }
+    private void UpdateTimer() { if (_progressVisible && IsPlaying && !_disposed) _timer.Start(); else _timer.Stop(); }
+    public Task<bool> TryPauseAsync() => ControlAsync(s => s.TryPauseAsync().AsTask());
+    public Task<bool> TogglePlayPauseAsync() => ControlAsync(s => s.TryTogglePlayPauseAsync().AsTask());
+    public Task<bool> TrySkipPreviousAsync() => ControlAsync(s => s.TrySkipPreviousAsync().AsTask());
+    public Task<bool> TrySkipNextAsync() => ControlAsync(s => s.TrySkipNextAsync().AsTask());
+    private async Task<bool> ControlAsync(Func<GlobalSystemMediaTransportControlsSession, Task<bool>> action)
+    {
+        try { return _session != null && await action(_session); }
+        catch (Exception ex) { Debug.WriteLine($"Media control: {ex.Message}"); return false; }
+    }
+    private void DetachSession()
+    {
+        if (_session == null) return;
+        _session.MediaPropertiesChanged -= OnMediaChanged;
+        _session.PlaybackInfoChanged -= OnPlaybackChanged;
+        _session.TimelinePropertiesChanged -= OnTimelineChanged;
+    }
+    public void Dispose()
+    {
+        _disposed = true; ++_generation; _timer.Stop(); _timer.Tick -= OnTick;
+        DetachSession();
+        if (_manager == null) return;
+        _manager.SessionsChanged -= OnSessionsChanged;
+        _manager.CurrentSessionChanged -= OnCurrentChanged;
     }
 }

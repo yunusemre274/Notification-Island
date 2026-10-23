@@ -1,0 +1,17 @@
+PASS Initial Windows history does not trigger compact preview
+PASS Newest notification wins when a burst arrives
+PASS Duplicate provider IDs never create duplicate cards or previews
+PASS Dismissed Windows notifications disappear from the mirror
+PASS Read state survives new provider instances of unchanged notifications
+PASS Changed payload replaces a card without losing read state
+PASS Notification collection remains bounded to the newest 40
+PASS Successful activation marks only the selected notification read
+PASS Failed activation keeps notification unread
+PASS Permission revocation clears every mirrored notification
+PASS Snapshot permutations keep order and identity consistent
+PASS Legacy settings gain safe appearance defaults and preserve user model
+PASS Malformed dimensions and invalid enum values are constrained
+PASS Appearance customization survives JSON round trip
+PASS Atomic settings save and reload uses isolated storage
+PASS Malformed JSON is backed up before defaults may replace it
+16 passed; 0 failed.

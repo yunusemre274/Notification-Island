@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <!-- Allows these platform-independent checks on hosts that only have a newer runtime. -->
+    <RollForward>Major</RollForward>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="CoreTests.cs"/>
+    <Compile Include="../Configuration/AgentOptions.cs" Link="Configuration/AgentOptions.cs"/>
+    <Compile Include="../Core/ObservableObject.cs" Link="Core/ObservableObject.cs"/>
+    <Compile Include="../Configuration/AppearanceSettings.cs" Link="Configuration/AppearanceSettings.cs"/>
+    <Compile Include="../Models/AppSettings.cs" Link="Models/AppSettings.cs"/>
+    <Compile Include="../Models/NotificationItem.cs" Link="Models/NotificationItem.cs"/>
+    <Compile Include="../Services/Notifications/INotificationProvider.cs" Link="Notifications/INotificationProvider.cs"/>
+    <Compile Include="../Services/Notifications/NotificationRouter.cs" Link="Notifications/NotificationRouter.cs"/>
+  </ItemGroup>
+</Project>

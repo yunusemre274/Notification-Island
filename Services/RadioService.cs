@@ -20,6 +20,15 @@ namespace NI.Services
         public static event EventHandler? WifiStateChanged;
         public static event EventHandler? BluetoothStateChanged;
 
+        private static void OnWifiState(Radio sender, object args) => WifiStateChanged?.Invoke(null, EventArgs.Empty);
+        private static void OnBluetoothState(Radio sender, object args) => BluetoothStateChanged?.Invoke(null, EventArgs.Empty);
+        public static void Release()
+        {
+            if (_wifiRadio != null) _wifiRadio.StateChanged -= OnWifiState;
+            if (_bluetoothRadio != null) _bluetoothRadio.StateChanged -= OnBluetoothState;
+            _wifiRadio = null; _bluetoothRadio = null; _initialized = false;
+        }
+
         /// <summary>
         /// Gets the current Wi-Fi radio state.
         /// </summary>
@@ -72,12 +81,12 @@ namespace NI.Services
                     {
                         case RadioKind.WiFi:
                             _wifiRadio = radio;
-                            _wifiRadio.StateChanged += (s, e) => WifiStateChanged?.Invoke(null, EventArgs.Empty);
+                            _wifiRadio.StateChanged += OnWifiState;
                             break;
 
                         case RadioKind.Bluetooth:
                             _bluetoothRadio = radio;
-                            _bluetoothRadio.StateChanged += (s, e) => BluetoothStateChanged?.Invoke(null, EventArgs.Empty);
+                            _bluetoothRadio.StateChanged += OnBluetoothState;
                             break;
                     }
                 }
@@ -212,7 +221,7 @@ namespace NI.Services
                             if (_wifiRadio == null)
                             {
                                 _wifiRadio = radio;
-                                _wifiRadio.StateChanged += (s, e) => WifiStateChanged?.Invoke(null, EventArgs.Empty);
+                                _wifiRadio.StateChanged += OnWifiState;
                             }
                             break;
 
@@ -220,7 +229,7 @@ namespace NI.Services
                             if (_bluetoothRadio == null)
                             {
                                 _bluetoothRadio = radio;
-                                _bluetoothRadio.StateChanged += (s, e) => BluetoothStateChanged?.Invoke(null, EventArgs.Empty);
+                                _bluetoothRadio.StateChanged += OnBluetoothState;
                             }
                             break;
                     }

@@ -1,0 +1,16 @@
+<UserControl x:Class="NI.Views.Controls.DashboardPanel"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:p="clr-namespace:NI.Views.Controls">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition><ColumnDefinition.Style><Style TargetType="ColumnDefinition"><Setter Property="Width" Value="1.1*"/><Style.Triggers><DataTrigger Binding="{Binding Appearance.ShowNotifications}" Value="False"><Setter Property="Width" Value="0"/></DataTrigger></Style.Triggers></Style></ColumnDefinition.Style></ColumnDefinition>
+            <ColumnDefinition><ColumnDefinition.Style><Style TargetType="ColumnDefinition"><Setter Property="Width" Value="14"/><Style.Triggers><DataTrigger Binding="{Binding HasUtilitySections}" Value="False"><Setter Property="Width" Value="0"/></DataTrigger><DataTrigger Binding="{Binding Appearance.ShowNotifications}" Value="False"><Setter Property="Width" Value="0"/></DataTrigger></Style.Triggers></Style></ColumnDefinition.Style></ColumnDefinition>
+            <ColumnDefinition><ColumnDefinition.Style><Style TargetType="ColumnDefinition"><Setter Property="Width" Value="*"/><Style.Triggers><DataTrigger Binding="{Binding HasUtilitySections}" Value="False"><Setter Property="Width" Value="0"/></DataTrigger></Style.Triggers></Style></ColumnDefinition.Style></ColumnDefinition>
+        </Grid.ColumnDefinitions>
+        <p:NotificationsPanel Visibility="{Binding Appearance.ShowNotifications, Converter={StaticResource BoolVisibility}}"/>
+        <StackPanel Grid.Column="2">
+            <p:ConnectionsPanel Visibility="{Binding Appearance.ShowConnections, Converter={StaticResource BoolVisibility}}"/>
+            <p:SystemStatusPanel Margin="0,10,0,0" Visibility="{Binding Appearance.ShowSystemStatus, Converter={StaticResource BoolVisibility}}"/>
+            <p:MediaPanel Margin="0,10,0,0" Visibility="{Binding Appearance.ShowMedia, Converter={StaticResource BoolVisibility}}"/>
+        </StackPanel>
+    </Grid>
+</UserControl>

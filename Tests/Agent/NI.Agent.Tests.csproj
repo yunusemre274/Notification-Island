@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+ <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings><RollForward>Major</RollForward></PropertyGroup>
+ <ItemGroup><Compile Include="../../Configuration/AgentOptions.cs" Link="Configuration/AgentOptions.cs"/><Compile Include="../../Agent/**/*.cs" LinkBase="Agent"/></ItemGroup>
+</Project>

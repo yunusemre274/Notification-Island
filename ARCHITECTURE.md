@@ -1,520 +1,77 @@
-# Windows Dynamic Island - Architecture Diagram
+# Notification Island mimarisi
 
-## System Architecture Overview
+Yeni kabuk tek bir pencere, tek bir `IslandVM` ve servis sözleşmeleri üzerinden çalışır. Görünüm code-behind’ında bildirim yakalama, sistem ölçümü veya donanım kontrolü bulunmaz.
 
-```
-┌───────────────────────────────────────────────────────────────────────┐
-│                        MainWindow (WPF Container)                     │
-│                     [Always-on-top, Transparent]                      │
-└────────────────────────────────┬──────────────────────────────────────┘
-                                 │
-┌────────────────────────────────▼──────────────────────────────────────┐
-│                          IslandView.xaml                              │
-│                    [Main Dynamic Island UI Component]                 │
-│                                                                        │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │  COMPACT STATE (350x36)                                      │   │
-│  │  ┌────────┬──────────────────────┬────────────────┐         │   │
-│  │  │ Icon   │  Primary Text        │  Time / Status │         │   │
-│  │  └────────┴──────────────────────┴────────────────┘         │   │
-│  └──────────────────────────────────────────────────────────────┘   │
-│                                                                        │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │  EXPANDED STATE (680x50+)                                    │   │
-│  │  ┌────────────────────────────────────────────────────────┐ │   │
-│  │  │  CONTENT LAYERS (Priority-based visibility)            │ │   │
-│  │  │  ┌──────────────────────────────────────────────────┐  │ │   │
-│  │  │  │ 1. System Notification (Highest)                 │  │ │   │
-│  │  │  ├──────────────────────────────────────────────────┤  │ │   │
-│  │  │  │ 2. Headphone Connection Banner                   │  │ │   │
-│  │  │  ├──────────────────────────────────────────────────┤  │ │   │
-│  │  │  │ 3. Spotify Now Playing + Media Controls (NEW)    │  │ │   │
-│  │  │  ├──────────────────────────────────────────────────┤  │ │   │
-│  │  │  │ 4. System Performance Panel (NEW)                │  │ │   │
-│  │  │  ├──────────────────────────────────────────────────┤  │ │   │
-│  │  │  │ 5. AI Assistant Interface (NEW)                  │  │ │   │
-│  │  │  ├──────────────────────────────────────────────────┤  │ │   │
-│  │  │  │ 6. Active Window Info                            │  │ │   │
-│  │  │  ├──────────────────────────────────────────────────┤  │ │   │
-│  │  │  │ 7. Smart Events (Birthday, Holidays)             │  │ │   │
-│  │  │  └──────────────────────────────────────────────────┘  │ │   │
-│  │  └────────────────────────────────────────────────────────┘ │   │
-│  └──────────────────────────────────────────────────────────────┘   │
-│                                                                        │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │  CONTROL CENTER PANEL (Appears on click)                     │   │
-│  │  ┌───────────┬───────────┬───────────┬───────────┐          │   │
-│  │  │ Volume    │ WiFi      │ Bluetooth │ Brightness│          │   │
-│  │  │ Slider    │ Networks  │ Devices   │ Slider    │          │   │
-│  │  └───────────┴───────────┴───────────┴───────────┘          │   │
-│  └──────────────────────────────────────────────────────────────┘   │
-└────────────────────────────────┬──────────────────────────────────────┘
-                                 │
-                                 │ Data Binding
-                                 │
-┌────────────────────────────────▼──────────────────────────────────────┐
-│                        IslandVM (ViewModel)                           │
-│                   [MVVM Pattern - INotifyPropertyChanged]             │
-│                                                                        │
-│  Properties:                                                          │
-│  • CurrentContent (Spotify/System/AI/Window)                         │
-│  • ShowMediaControls (bool)                                          │
-│  • ShowSystemInfo (bool)                                             │
-│  • ShowAiAssistant (bool)                                            │
-│  • CpuUsage, RamUsage, GpuUsage                                      │
-│                                                                        │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │  Consolidated Timer (3-second interval)                       │   │
-│  │  ┌────────────────────────────────────────────────────────┐  │   │
-│  │  │ Every 3s:  Check Spotify, Audio Devices                │  │   │
-│  │  │ Every 10s: Update Clock                                │  │   │
-│  │  │ Every 60s: Check Smart Events                          │  │   │
-│  │  └────────────────────────────────────────────────────────┘  │   │
-│  └──────────────────────────────────────────────────────────────┘   │
-└─────┬──────────┬──────────┬──────────┬──────────────────────────────┘
-      │          │          │          │
-      │          │          │          │
-┌─────▼───┐ ┌───▼─────┐ ┌──▼──────┐ ┌▼──────────┐
-│ Existing│ │   NEW   │ │   NEW   │ │    NEW    │
-│ Services│ │ Media   │ │ System  │ │ AI Assist │
-└─────┬───┘ │ Session │ │ Monitor │ │  Service  │
-      │     └────┬────┘ └────┬────┘ └─────┬─────┘
-      │          │           │            │
-┌─────▼──────────▼───────────▼────────────▼─────────────────────────┐
-│                      SERVICE LAYER                                 │
-│                                                                     │
-│  EXISTING SERVICES:                                                │
-│  ┌──────────────────┬──────────────────┬───────────────────────┐ │
-│  │ SpotifyService   │ AudioService     │ WifiService           │ │
-│  │ (Track Info)     │ (Volume, Devices)│ (Networks, Connect)   │ │
-│  └──────────────────┴──────────────────┴───────────────────────┘ │
-│  ┌──────────────────┬──────────────────┬───────────────────────┐ │
-│  │ BluetoothService │ BrightnessService│ RadioService          │ │
-│  │ (Pairing, Conn.) │ (Display Control)│ (WiFi/BT Toggle)      │ │
-│  └──────────────────┴──────────────────┴───────────────────────┘ │
-│  ┌──────────────────┬──────────────────┬───────────────────────┐ │
-│  │ ActiveWindow     │ SmartEvent       │ Notification          │ │
-│  │ Service          │ Service          │ Service               │ │
-│  └──────────────────┴──────────────────┴───────────────────────┘ │
-│                                                                     │
-│  NEW SERVICES:                                                     │
-│  ┌────────────────────────────────────────────────────────────┐  │
-│  │ MediaSessionService                                        │  │
-│  │ • Previous/Play/Pause/Next track control                   │  │
-│  │ • Playback state monitoring                                │  │
-│  │ • Timeline/progress tracking                               │  │
-│  │ • UWP GlobalSystemMediaTransportControls API               │  │
-│  └────────────────────────────────────────────────────────────┘  │
-│                                                                     │
-│  ┌────────────────────────────────────────────────────────────┐  │
-│  │ SystemMonitorService                                       │  │
-│  │ • CPU usage (PerformanceCounter)                           │  │
-│  │ • RAM usage (PerformanceCounter)                           │  │
-│  │ • GPU usage (WMI - optional)                               │  │
-│  │ • Background thread data collection (1s interval)          │  │
-│  │ • Thread-safe property access                              │  │
-│  └────────────────────────────────────────────────────────────┘  │
-│                                                                     │
-│  ┌────────────────────────────────────────────────────────────┐  │
-│  │ AiAssistantService                                         │  │
-│  │ ┌────────────────────────────────────────────────────────┐ │  │
-│  │ │ OllamaClient                                           │ │  │
-│  │ │ • HTTP client for local Ollama API                    │ │  │
-│  │ │ • Model: llama2 (configurable)                        │ │  │
-│  │ │ • Endpoint: http://localhost:11434                    │ │  │
-│  │ └────────────────────────────────────────────────────────┘ │  │
-│  │ ┌────────────────────────────────────────────────────────┐ │  │
-│  │ │ CommandParser                                          │ │  │
-│  │ │ • Natural language → Structured command                │ │  │
-│  │ │ • JSON response parsing                                │ │  │
-│  │ │ • Intent classification                                │ │  │
-│  │ └────────────────────────────────────────────────────────┘ │  │
-│  │ ┌────────────────────────────────────────────────────────┐ │  │
-│  │ │ CommandExecutor                                        │ │  │
-│  │ │ • Sandboxed file operations                            │ │  │
-│  │ │ • Folder search                                        │ │  │
-│  │ │ • Path validation (user directory only)                │ │  │
-│  │ └────────────────────────────────────────────────────────┘ │  │
-│  └────────────────────────────────────────────────────────────┘  │
-└─────┬──────────────────┬──────────────────┬───────────────────────┘
-      │                  │                  │
-┌─────▼──────┐  ┌────────▼────────┐  ┌──────▼──────────────────────┐
-│  Windows   │  │  Windows        │  │  Ollama Local API           │
-│  Media     │  │  Performance    │  │  (http://localhost:11434)   │
-│  Session   │  │  Counters       │  │                             │
-│  Manager   │  │  WMI            │  │  • LLaMA 2 Model            │
-│  (UWP API) │  │                 │  │  • Fully Offline            │
-└────────────┘  └─────────────────┘  └─────────────────────────────┘
+## Sorumluluklar
+
+| Konum | Sorumluluk |
+|---|---|
+| `Program.cs`, `MainWindow.xaml.cs` | Composition root, pencere yaşam döngüsü, DPI/konum, hover ve Escape |
+| `ViewModels/IslandVM.cs` | Expanded/ayar/asistan durumu, compact içerik önceliği, komutlar, servis abonelikleri |
+| `ViewModels/QuickControlsVM.cs` | Gerçek donanım durumunu UI’ya aktarma, parlaklık debounce |
+| `Configuration/AppearanceSettings.cs` | Tipli, gözlemlenebilir, sınırları doğrulanan görünüm ayarları |
+| `Models/AppSettings.cs` | Geriye uyumlu JSON ayar okuma ve atomik yazma |
+| `Models/NotificationItem.cs` | Provider kimliği, kaynak uygulama kimliği, içerik ve yerel okunma durumu |
+| `Services/Notifications/` | Windows capture, bounded liste senkronizasyonu, uygulama aktivasyonu |
+| `Services/SystemMonitoring/ISystemMonitor.cs` | UI’dan bağımsız ölçüm sözleşmesi ve snapshot |
+| `Services/SystemMonitorService.cs` | Native CPU/RAM ve PDH GPU toplayıcısı |
+| `Services/Media/IMediaService.cs` | Medya sözleşmesi |
+| `Services/MediaSessionService.cs` | GSMTC oturum seçimi, metadata/kapak ve transport kontrolleri |
+| `Services/AudioEndpointService.cs` | Core Audio bildirimleri ve varsayılan çıkış aygıtı |
+| `Services/RadioService.cs`, `BrightnessService.cs` | Windows donanım adaptörleri |
+| `Services/Windowing/` | DWM materyali ve DPI’ya göre native köşeler |
+| `Themes/`, `Styles/`, `Controls/` | Renk/font/yüzey token’ları, tema uygulama, reusable ikon ve metric kontrolü |
+| `Views/Controls/` | Bildirim, bağlantı, sistem, medya, ayar ve asistan görünümleri |
+| `Tests/` | Platformdan bağımsız mantık ve Windows WPF görünüm kontrolleri |
+| `Packaging/`, `scripts/` | MSIX manifesti, logo varlıkları ve paketleme |
+
+## Durum ve veri akışı
+
+```text
+WindowsNotificationProvider ──snapshot──▶ NotificationRouter ──liste/arrived──▶ IslandVM
+                                                                     │
+ISystemMonitor ──SystemMetrics────────────────────────────────────────┤
+IMediaService ──Changed───────────────────────────────────────────────┤
+AppearanceSettings ──PropertyChanged─────────────────────────────────┤
+                                                                     ▼
+                           IslandView / DashboardPanel / bölüm görünümleri
 ```
 
----
+`IsExpanded`, `IsSettingsOpen` ve `IsAssistantOpen` yalnızca view model’de değiştirilir. Ayar ve asistan aynı anda açık kalamaz; daralma ikisini de kapatır. Panel boyutu, içerik görünürlüğü ve komutlar aynı durumdan türetilir. Önceki global `TopBarStateController` ve görünümdeki paralel mod alanları kaldırılmıştır.
 
-## Data Flow Diagrams
+Compact önceliği: etkin 9 saniyelik yeni bildirim preview’i → mevcut medya oturumu → idle. Kullanıcının kapattığı özetler atlanır; saat ve hava ayrı alanlardır. Başlangıç snapshot’ı listelenir fakat preview oluşturmaz. Gelen bildirim kullanıcının açık ayar/asistan panelini kapatmaz.
 
-### 1. Spotify Media Control Flow
+`NotificationRouter.Synchronize` ID’ye göre duplicate engeller, snapshot zamanına göre sıralar, 40 kayıt tutar, kaldırılan öğeleri düşürür ve okunma durumunu korur. UI thread’inde çağrılır. Snapshot payload’ı değişirse kart güncellenir. Router yalnızca aktivasyon sonucu kabul edildiğinde yerel okunma durumunu değiştirir. AppsFolder sonucu hedefin eylemi işlediğinin onayı değildir.
 
-```
-User Click (Previous/Play/Pause/Next)
-        ↓
-IslandView.xaml.cs Event Handler
-        ↓
-MediaSessionService.PlayAsync() / PauseAsync() / etc.
-        ↓
-GlobalSystemMediaTransportControlsSession API Call
-        ↓
-Spotify Application receives command
-        ↓
-Playback state changes
-        ↓
-MediaSessionService.PlaybackInfoChanged event fires
-        ↓
-IslandVM.OnPlaybackStateChanged()
-        ↓
-UI updates (Play/Pause icon toggle)
-```
+## İş parçacıkları ve yaşam döngüsü
 
-### 2. System Monitor Flow
+- WinRT listener izin isteği UI thread’inde, açık kullanıcı komutuyla yapılır. Snapshot okuma tek semaphore ile sıralanır; uygulama aktifken `NotificationChanged` kullanılır.
+- Provider/monitor olayları UI koleksiyonunu doğrudan değiştirmez. `IslandVM` dispatcher üzerinden aktarır ve kapanıştan sonra gelen işleri yok sayar.
+- Sistem örnekleyicisi thread pool’da çalışır, üst üste binmez. UI tarafındaki aç/kapat metodu PDH hazırlığını beklemez. CPU/RAM native API kullanır. GPU instance keşfi etkin örnekleme sırasında en fazla 30 saniyede bir yapılır; sayaçlar arada tekrar kullanılır.
+- GPU verisi farklı motorları toplamak yerine aynı fiziksel 3D motorun süreç örneklerini toplar ve en yoğun motoru gösterir. Task Manager’ın bütün motorları kapsayan GPU değeriyle birebir aynı metrik değildir.
+- Ölçüm panel kapalıyken, ayar/asistan açıkken veya bölüm devre dışıyken durur. GPU sayaçlarını örnekleyici serbest bırakır; UI thread’i pahalı native kaynak temizliğini beklemez.
+- GSMTC değişiklikleri dispatcher’a taşınır. Async metadata işlemleri generation kontrolüyle eski oturum bilgisinin yeniyi ezmesini engeller. İlerleme timer’ı yalnızca oynatma sürerken ve medya bölümü görünürken çalışır.
+- NAudio cihaz ve volume olayları kullanılır. DDC/WMI parlaklık okuması arka plandadır; yazmalar 200 ms debounce ile sıralanır.
+- Kapanış; timer’ları durdurur, abonelikleri kaldırır, HTTP işlerini iptal eder ve servisleri dispose eder. Pencere kapatılmasını engelleyen önceki davranış kaldırılmıştır.
 
-```
-SystemMonitorService.Start()
-        ↓
-Background Timer (1 second interval)
-        ↓
-PerformanceCounter.NextValue() for CPU/RAM
-        ↓
-(Optional) WMI Query for GPU
-        ↓
-Thread-safe property update
-        ↓
-MetricsUpdated event fires
-        ↓
-IslandView.Dispatcher.Invoke()
-        ↓
-UI thread updates progress bars
-        ↓
-Smooth animation via data binding
-```
+## Tasarım sistemi ve pencere
 
-### 3. AI Assistant Flow
+`Tokens.xaml` başlangıç paletini; `ThemeManager` seçilmiş tint/opacity ve yüksek karşıtlık renklerini; `Controls.xaml` etkileşim, kart ve slider stillerini sağlar. `MetricCard` okunabilir sayı, ince çizgi ve alt açıklamayı tekrar kullanır. Windows ikon fontları aynı outline ailesini kullanır.
 
-```
-User types command in AI input box
-        ↓
-User presses Enter
-        ↓
-IslandView.ProcessAiCommandAsync()
-        ↓
-AiAssistantService.ProcessCommandAsync(input)
-        ↓
-┌────────────────────────────────────────┐
-│ CommandParser.ParseAsync()             │
-│   ↓                                    │
-│ OllamaClient.GenerateAsync(prompt)     │
-│   ↓                                    │
-│ HTTP POST to Ollama API                │
-│   ↓                                    │
-│ JSON response parsing                  │
-│   ↓                                    │
-│ ParsedCommand object created           │
-└────────────────────────────────────────┘
-        ↓
-┌────────────────────────────────────────┐
-│ CommandExecutor.ExecuteAsync(command)  │
-│   ↓                                    │
-│ Validate command type                  │
-│   ↓                                    │
-│ Validate file paths (security)         │
-│   ↓                                    │
-│ Execute system operation               │
-│   ↓                                    │
-│ Return CommandExecutionResult          │
-└────────────────────────────────────────┘
-        ↓
-UI displays result (success/error)
-        ↓
-Fade in result panel with color coding
-```
+`AllowsTransparency` katmanlı pencere yaklaşımı yerine normal WPF HWND ve `WindowChrome` kullanılır. Desteklenen Windows 11 sürümlerinde DWM materyali istenir. Böylece WPF `BlurEffect` ile arayüzün kendisi bulanıklaştırılmaz. Windows desteklemiyorsa `ThemeManager` tint’i tamamen opaklaştırır. Köşeler native region ile kırpılır. Özel region ile DWM gölgesi/materyalinin birlikte görünümü Windows QA gerektirir.
 
----
+Pencere içeriğe göre boyutlanır; compact durumda ekranın büyük şeffaf bir alanını kaplayıp tıklamaları yakalayan 750×500 pencere yoktur. İki kolonlu dashboard, 460 DIP varsayılan toplam yükseklik sınırı ve scroll kullanır. Bildirim listesi sanallaştırılır. Konum birincil çalışma alanının üst ortasına göre hesaplanır, offset uygulanır ve ekrana sığdırılır. Tam monitör seçici henüz yoktur.
 
-## UI State Machine
+## Ayarlar ve genişletme noktaları
 
-```
-┌─────────────────┐
-│  COMPACT MODE   │
-│   (350x36)      │
-└────────┬────────┘
-         │
-         │ Hover / Notification / Spotify Track Change
-         │
-         ▼
-┌─────────────────┐
-│  EXPANDED MODE  │
-│   (680x50+)     │
-└────────┬────────┘
-         │
-         │ Content Priority Evaluation
-         │
-    ┌────┴────┬────────┬──────────┬──────────┬───────────┐
-    ▼         ▼        ▼          ▼          ▼           ▼
-┌────────┐ ┌─────┐ ┌──────┐ ┌──────────┐ ┌──────┐ ┌────────┐
-│ System │ │Head-│ │Spotify│ │ System   │ │  AI  │ │ Active │
-│ Notif. │ │phone│ │ Card  │ │ Info     │ │Assist│ │ Window │
-│(High)  │ │     │ │+ Media│ │ Panel    │ │      │ │ (Low)  │
-└────────┘ └─────┘ └──────┘ └──────────┘ └──────┘ └────────┘
-    │         │        │          │          │         │
-    └─────────┴────────┴──────────┴──────────┴─────────┘
-                        │
-                        │ Auto-collapse after 4-6s
-                        │ OR Manual collapse
-                        ▼
-              ┌─────────────────┐
-              │  COMPACT MODE   │
-              └─────────────────┘
-```
+Yeni `Appearance` alanı eski JSON dosyalarında otomatik varsayılan değer alır; sayısal alanlar setter’da sınırlanır. Kaydetme UI tarafında 400 ms debounce edilir; geçici dosya üzerine yazılıp taşınır. Hata kullanıcıya durum mesajı olarak döner. Bozuk ayar dosyası `.invalid-{timestamp}.json` adıyla yedeklenir; sonra varsayılanlara dönülür. Yedek alınamıyorsa özgün dosyayı korumak için kaydetme reddedilir. Testler ayrı bir ayar dosyası yolu kullanır.
 
----
+Yeni kaynaklar `INotificationProvider` ile snapshot sağlayabilir. Router, provider’a özgü olmayan `NotificationItem` kullanır; `NotificationActionHandler`, kaynak uygulama için güvenilir entegrasyon eklenecek noktadır. İleride uygulama destekli deep link handler’ları eklenebilir; bildirim metninden komut veya link çıkarılıp çalıştırılmaz.
 
-## Threading Model
+Mevcut AI/SmartEvent/Wi-Fi/Bluetooth/Spotify yardımcı sınıflarının kullanılabilir kaynak kodları korunmuştur. Eski görev/masaüstü görünürlük modu, eski kontrol popup’ları ve mock notification servisi yeni kabuktan kaldırılmıştır. Yeni görev runtime’ı model metnini terminale çevirmez; kayıtlı, yetkilendirilmiş ve doğrulanan dosya/alarm araçlarını kullanır. Eski AI prototipleri kaynak olarak korunur, üretim derlemesinden çıkarılır. Bu geçiş eski görev giriş akışını kasıtlı olarak emekliye ayırır.
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│                       UI THREAD (Main)                       │
-│                                                              │
-│  • WPF Rendering                                            │
-│  • Event handlers                                           │
-│  • Data binding updates                                     │
-│  • Animation playback                                       │
-│                                                              │
-│  IslandView.xaml.cs                                         │
-│  IslandVM (PropertyChanged notifications)                   │
-└───────┬────────────────────────────────────────────────┬────┘
-        │                                                │
-        │ Async/Await                                    │
-        │                                                │
-┌───────▼────────────────────┐              ┌────────────▼─────────┐
-│  TASK THREAD POOL          │              │  BACKGROUND TIMER    │
-│                            │              │  THREAD              │
-│  • MediaSessionService     │              │                      │
-│    async operations        │              │ SystemMonitorService │
-│  • AiAssistantService      │              │  • 1-second timer    │
-│    HTTP calls to Ollama    │              │  • Performance       │
-│  • File I/O operations     │              │    counter reads     │
-│                            │              │  • WMI queries       │
-└────────────────────────────┘              └──────────────────────┘
-        │                                                │
-        │ Dispatcher.Invoke()                            │
-        │ (Marshal to UI thread)                         │
-        └─────────────────┬──────────────────────────────┘
-                          │
-                    ┌─────▼─────┐
-                    │ UI UPDATE │
-                    └───────────┘
-```
+Windows bildirim dağıtımı ve sınırlamalar: [docs/NOTIFICATIONS.md](docs/NOTIFICATIONS.md). Doğrulama: [docs/WINDOWS-VALIDATION.md](docs/WINDOWS-VALIDATION.md).
 
----
+## Yerel ajan ve kaynak bütçesi eki
 
-## Security Architecture (AI Assistant)
-
-```
-User Input: "Create file secret.txt on Desktop"
-        ↓
-┌───────────────────────────────────────────────────┐
-│ LAYER 1: Input Validation                         │
-│ • Non-empty string check                          │
-│ • Length limit (prevent prompt injection)         │
-└─────────────────┬─────────────────────────────────┘
-                  ↓
-┌───────────────────────────────────────────────────┐
-│ LAYER 2: AI Parsing (Ollama)                      │
-│ • Structured JSON output only                     │
-│ • Command type classification                     │
-│ • Parameter extraction                            │
-└─────────────────┬─────────────────────────────────┘
-                  ↓
-┌───────────────────────────────────────────────────┐
-│ LAYER 3: Command Validation                       │
-│ • Whitelist of allowed commands                   │
-│ • Parameter type checking                         │
-│ • No raw AI output execution                      │
-└─────────────────┬─────────────────────────────────┘
-                  ↓
-┌───────────────────────────────────────────────────┐
-│ LAYER 4: Path Sandboxing                          │
-│ • Resolve absolute path                           │
-│ • Check: path.StartsWith(UserProfileDirectory)    │
-│ • DENY if outside user directory                  │
-│ • DENY system folders (C:\Windows, etc.)          │
-└─────────────────┬─────────────────────────────────┘
-                  ↓
-┌───────────────────────────────────────────────────┐
-│ LAYER 5: Execution                                │
-│ • Deterministic function call                     │
-│ • Try-catch error handling                        │
-│ • Return structured result                        │
-└─────────────────┬─────────────────────────────────┘
-                  ↓
-        CommandExecutionResult
-        (Success + Result) OR (Failure + Error)
-```
-
-**Blocked Examples:**
-- ❌ `C:\Windows\System32\config.txt` → Access denied: Path outside user directory
-- ❌ `C:\ProgramFiles\malware.exe` → Access denied: Path outside user directory
-- ❌ `../../AppData/Roaming/passwords.txt` → Resolved path blocked
-- ✅ `C:\Users\Yunus\Desktop\file.txt` → Allowed
-- ✅ `C:\Users\Yunus\Documents\Projects\file.txt` → Allowed
-
----
-
-## Performance Budget
-
-| Component            | CPU Usage (Idle) | CPU Usage (Active) | Memory  |
-|---------------------|------------------|-------------------|---------|
-| Base Island UI      | < 1%            | < 2%              | ~50 MB  |
-| MediaSessionService | < 0.1%          | < 0.5%            | +5 MB   |
-| SystemMonitorService| < 1%            | < 2%              | +10 MB  |
-| AiAssistantService  | 0% (on-demand)  | < 5% (processing) | +20 MB  |
-| **TOTAL TARGET**    | **< 3%**        | **< 10%**         | **< 100MB** |
-
----
-
-## Module Independence Matrix
-
-|                  | Can work without Media | Can work without System Monitor | Can work without AI |
-|-----------------|------------------------|--------------------------------|-------------------|
-| Base Island     | ✅ Yes                 | ✅ Yes                         | ✅ Yes            |
-| Media Controls  | N/A                    | ✅ Yes                         | ✅ Yes            |
-| System Monitor  | ✅ Yes                 | N/A                            | ✅ Yes            |
-| AI Assistant    | ✅ Yes                 | ✅ Yes                         | N/A               |
-
-**Independence Achieved Through:**
-1. Feature flags in AppSettings
-2. Try-catch blocks for service initialization
-3. Null-conditional operators (`?.`)
-4. Graceful degradation (service unavailable → feature hidden)
-
----
-
-## Animation Timing Chart
-
-```
-┌────────────────────────────────────────────────────────────┐
-│ COMPACT → EXPANDED                                         │
-│                                                            │
-│ 0ms   ─────────────────────────────────────────────────→  │
-│       Start expansion                                      │
-│                                                            │
-│ 0-130ms  Width: 350 → 680 (CubicEase.EaseOut)            │
-│          Height: 36 → 50                                   │
-│          Corner Radius: 18 → 25                            │
-│                                                            │
-│ 0-50ms   Compact content: Opacity 1 → 0                   │
-│                                                            │
-│ 40-120ms Expanded content: Opacity 0 → 1                  │
-│                                                            │
-│ 130ms  ─────────────────────────────────────────────────→ │
-│        Animation complete                                  │
-└────────────────────────────────────────────────────────────┘
-
-┌────────────────────────────────────────────────────────────┐
-│ EXPANDED → COMPACT                                         │
-│                                                            │
-│ 0ms   ─────────────────────────────────────────────────→  │
-│       Start collapse                                       │
-│                                                            │
-│ 0-110ms  Width: 680 → 350 (CubicEase.EaseOut)            │
-│          Height: 50 → 36                                   │
-│          Corner Radius: 25 → 18                            │
-│                                                            │
-│ 0-40ms   Expanded content: Opacity 1 → 0                  │
-│                                                            │
-│ 30-80ms  Compact content: Opacity 0 → 1                   │
-│                                                            │
-│ 110ms  ─────────────────────────────────────────────────→ │
-│        Animation complete                                  │
-└────────────────────────────────────────────────────────────┘
-```
-
-**Media Button Interaction:**
-- Hover: Background opacity 0 → 0.19 (instant)
-- Press: Scale 1.0 → 0.95, Background opacity 0.19 → 0.31 (60ms)
-- Release: Scale 0.95 → 1.0, Background opacity 0.31 → 0.19 (80ms)
-
----
-
-## Error Handling Strategy
-
-### MediaSessionService
-```csharp
-try {
-    await InitializeAsync();
-} catch (UnauthorizedAccessException) {
-    // User denied media control permission
-    // → Feature silently disabled
-} catch (Exception) {
-    // Windows API unavailable
-    // → Feature silently disabled
-}
-```
-
-### SystemMonitorService
-```csharp
-try {
-    _cpuCounter = new PerformanceCounter(...);
-} catch (UnauthorizedAccessException) {
-    // Performance counters require admin on some systems
-    // → Show static "N/A" values
-} catch (Exception) {
-    // Counter unavailable
-    // → Disable specific metric
-}
-```
-
-### AiAssistantService
-```csharp
-if (!await _ollama.IsAvailableAsync()) {
-    // Ollama not running
-    // → Show red indicator
-    // → Input disabled with helpful message
-}
-
-try {
-    await ProcessCommandAsync(input);
-} catch (HttpRequestException) {
-    // Ollama crashed mid-request
-    // → Show error: "Ollama connection lost"
-} catch (TaskCanceledException) {
-    // Request timeout
-    // → Show error: "Request timed out"
-}
-```
-
----
-
-## Backward Compatibility
-
-### Existing Code Preservation
-✅ No modifications to existing service contracts
-✅ No changes to existing event signatures
-✅ No breaking changes to SpotifyService
-✅ IslandVM timer pattern maintained
-✅ All existing XAML controls preserved
-
-### Safe Integration Points
-1. **New services added as optional dependencies**
-   - Constructor: `_mediaSession = new MediaSessionService();`
-   - Initialization wrapped in try-catch
-   - Null checks before use
-
-2. **New XAML elements added with Visibility="Collapsed"**
-   - Existing layout unaffected
-   - Shown only when feature active
-
-3. **New properties added to IslandVM**
-   - Existing properties unchanged
-   - New bindings independent
-
----
-
-**End of Architecture Documentation**
+Görev döngüsü artık [AGENT_ARCHITECTURE.md](AGENT_ARCHITECTURE.md) kapsamındadır. Alarm servisi UI/LLM’den bağımsızdır. Expanded içerik DataTemplate ile ertelenir, QuickControls açılış/kapanış yaşam döngüsünde hazırlanıp bırakılır. Bellek bütçesi ve gerçek ölçüm ayrımı [PERFORMANCE_BUDGET.md](PERFORMANCE_BUDGET.md) ile [BENCHMARKS.md](BENCHMARKS.md) içindedir. Önceki sürümün eagerly-created görünümlerine ve yalnızca sohbet eden asistana ilişkin açıklamalar bu ek ile güncellenmiştir.

@@ -1,0 +1,7 @@
+<UserControl x:Class="NI.Views.Controls.SystemStatusPanel" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:c="clr-namespace:NI.Controls">
+    <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="6"/><ColumnDefinition/><ColumnDefinition Width="6"/><ColumnDefinition/></Grid.ColumnDefinitions>
+        <c:MetricCard ReduceMotion="{Binding Appearance.ReduceMotion}" Label="CPU" ValueText="{Binding CpuText}" Value="{Binding CpuValue}" Detail="{Binding CpuDetail}" AutomationProperties.Name="İşlemci kullanımı"/>
+        <c:MetricCard ReduceMotion="{Binding Appearance.ReduceMotion}" Grid.Column="2" Label="GPU" ValueText="{Binding GpuText}" Value="{Binding GpuValue}" Detail="{Binding GpuDetail}" AutomationProperties.Name="GPU 3D motor kullanımı"/>
+        <c:MetricCard ReduceMotion="{Binding Appearance.ReduceMotion}" Grid.Column="4" Label="RAM" ValueText="{Binding RamText}" Value="{Binding RamValue}" Detail="{Binding RamDetail}" AutomationProperties.Name="Bellek kullanımı"/>
+    </Grid>
+</UserControl>

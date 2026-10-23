@@ -1,169 +1,147 @@
-using System;
 using System.Diagnostics;
-using System.Management;
-using System.Threading;
+using System.Runtime.InteropServices;
+using NI.Services.SystemMonitoring;
 
-namespace NI.Services
+namespace NI.Services;
+
+// One non-overlapping sampler. No WMI queries in the CPU/RAM sampling path.
+public sealed class SystemMonitorService : ISystemMonitor
 {
-    public class SystemMonitorService : IDisposable
+    private readonly Timer _timer;
+    private readonly Dictionary<string, PerformanceCounter> _gpuCounters = new();
+    private volatile bool _active, _disposed;
+    private int _sampling, _generation, _baselineGeneration = -1;
+    private ulong _lastIdle, _lastKernel, _lastUser;
+    private DateTime _lastDiscovery = DateTime.MinValue;
+    public event EventHandler<SystemMetrics>? Updated;
+    public SystemMonitorService() => _timer = new Timer(Sample, null, Timeout.Infinite, Timeout.Infinite);
+
+    public void SetActive(bool active)
     {
-        private PerformanceCounter? _cpuCounter;
-        private PerformanceCounter? _ramAvailableCounter;
-        private Timer? _updateTimer;
-        private readonly object _lock = new();
+        // Never wait for PDH enumeration on the UI thread.
+        if (_disposed || _active == active) return;
+        _active = active;
+        Interlocked.Increment(ref _generation);
+        _timer.Change(0, Timeout.Infinite);
+    }
 
-        private float _cpuUsage;
-        private float _ramUsage;
-        private float _ramUsedGB;
-        private float _ramTotalGB;
-        private float? _gpuUsage;
-
-        public float CpuUsage
+    private void Sample(object? state)
+    {
+        if (Interlocked.CompareExchange(ref _sampling, 1, 0) != 0) return;
+        try
         {
-            get { lock (_lock) return _cpuUsage; }
-            private set { lock (_lock) _cpuUsage = value; }
-        }
-
-        public float RamUsage
-        {
-            get { lock (_lock) return _ramUsage; }
-            private set { lock (_lock) _ramUsage = value; }
-        }
-
-        public float RamUsedGB
-        {
-            get { lock (_lock) return _ramUsedGB; }
-            private set { lock (_lock) _ramUsedGB = value; }
-        }
-
-        public float RamTotalGB
-        {
-            get { lock (_lock) return _ramTotalGB; }
-            private set { lock (_lock) _ramTotalGB = value; }
-        }
-
-        public float? GpuUsage
-        {
-            get { lock (_lock) return _gpuUsage; }
-            private set { lock (_lock) _gpuUsage = value; }
-        }
-
-        public event EventHandler<SystemMetricsEventArgs>? MetricsUpdated;
-
-        public void Start()
-        {
-            try
+            if (!_active || _disposed) return;
+            var generation = Volatile.Read(ref _generation);
+            if (_baselineGeneration != generation)
             {
-                // Initialize performance counters
-                _cpuCounter = new PerformanceCounter(
-                    "Processor",
-                    "% Processor Time",
-                    "_Total",
-                    true);
-
-                _ramAvailableCounter = new PerformanceCounter(
-                    "Memory",
-                    "Available MBytes",
-                    true);
-
-                // Get total RAM
-                _ramTotalGB = GetTotalPhysicalMemoryGB();
-
-                // First read (always returns 0)
-                _cpuCounter.NextValue();
-
-                // Start background timer (1 second interval)
-                _updateTimer = new Timer(
-                    UpdateMetrics,
-                    null,
-                    TimeSpan.FromSeconds(1),
-                    TimeSpan.FromSeconds(1));
+                _lastIdle = _lastKernel = _lastUser = 0;
+                _baselineGeneration = generation;
             }
-            catch (Exception ex)
+            double? cpu = null;
+            if (GetSystemTimes(out var idle, out var kernel, out var user))
             {
-                Debug.WriteLine($"Failed to initialize system monitor: {ex.Message}");
-            }
-        }
-
-        private void UpdateMetrics(object? state)
-        {
-            try
-            {
-                // CPU Usage
-                CpuUsage = _cpuCounter?.NextValue() ?? 0;
-
-                // RAM Usage
-                float ramAvailableMB = _ramAvailableCounter?.NextValue() ?? 0;
-                float ramUsedMB = (_ramTotalGB * 1024) - ramAvailableMB;
-                RamUsedGB = ramUsedMB / 1024f;
-                RamUsage = (ramUsedMB / (_ramTotalGB * 1024)) * 100f;
-
-                // GPU Usage (optional, can be expensive)
-                GpuUsage = GetGpuUsage();
-
-                // Fire event on background thread
-                MetricsUpdated?.Invoke(this, new SystemMetricsEventArgs
+                if (_lastKernel != 0)
                 {
-                    CpuUsage = CpuUsage,
-                    RamUsage = RamUsage,
-                    RamUsedGB = RamUsedGB,
-                    RamTotalGB = RamTotalGB,
-                    GpuUsage = GpuUsage
-                });
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error updating metrics: {ex.Message}");
-            }
-        }
-
-        private float GetTotalPhysicalMemoryGB()
-        {
-            try
-            {
-                using var searcher = new ManagementObjectSearcher(
-                    "SELECT TotalPhysicalMemory FROM Win32_ComputerSystem");
-
-                foreach (var obj in searcher.Get())
-                {
-                    var totalBytes = Convert.ToUInt64(obj["TotalPhysicalMemory"]);
-                    return totalBytes / (1024f * 1024f * 1024f);
+                    var total = (kernel - _lastKernel) + (user - _lastUser);
+                    if (total > 0) cpu = Math.Clamp(100d * (1d - (double)(idle - _lastIdle) / total), 0, 100);
                 }
+                _lastIdle = idle; _lastKernel = kernel; _lastUser = user;
             }
-            catch
+            var memory = new MemoryStatus { Length = (uint)Marshal.SizeOf<MemoryStatus>() };
+            var available = GlobalMemoryStatusEx(ref memory) && memory.TotalPhysical > 0;
+            double? totalGb = available ? memory.TotalPhysical / 1073741824d : null;
+            double? usedGb = available ? (memory.TotalPhysical - memory.AvailablePhysical) / 1073741824d : null;
+            var metrics = new SystemMetrics(cpu, SampleGpu(), available ? memory.MemoryLoad : null, usedGb, totalGb);
+            if (_active && !_disposed && generation == Volatile.Read(ref _generation)) Updated?.Invoke(this, metrics);
+        }
+        catch (Exception ex) { Debug.WriteLine($"System metrics unavailable: {ex.Message}"); }
+        finally
+        {
+            if (!_active || _disposed) ReleaseGpuCounters();
+            Volatile.Write(ref _sampling, 0);
+            if (!_disposed)
             {
-                return 16; // Fallback
+                try { _timer.Change(_active ? 1500 : Timeout.Infinite, Timeout.Infinite); }
+                catch (ObjectDisposedException) { }
             }
-            return 16;
-        }
-
-        private float? GetGpuUsage()
-        {
-            // Optional: Implement GPU monitoring via WMI or LibreHardwareMonitor
-            // For minimal overhead, return null initially
-            return null;
-        }
-
-        public void Stop()
-        {
-            _updateTimer?.Change(Timeout.Infinite, Timeout.Infinite);
-        }
-
-        public void Dispose()
-        {
-            Stop();
-            _updateTimer?.Dispose();
-            _cpuCounter?.Dispose();
-            _ramAvailableCounter?.Dispose();
         }
     }
 
-    public class SystemMetricsEventArgs : EventArgs
+    private double? SampleGpu()
     {
-        public float CpuUsage { get; init; }
-        public float RamUsage { get; init; }
-        public float RamUsedGB { get; init; }
-        public float RamTotalGB { get; init; }
-        public float? GpuUsage { get; init; }
+        // PDH GPU Engine counters require a compatible WDDM driver. Aggregate each physical
+        // 3D engine, then show the busiest engine, rather than summing unrelated GPU engines.
+        if (DateTime.UtcNow - _lastDiscovery > TimeSpan.FromSeconds(30))
+        {
+            _lastDiscovery = DateTime.UtcNow;
+            try
+            {
+                var category = new PerformanceCounterCategory("GPU Engine");
+                var names = category.GetInstanceNames().Where(x => x.Contains("engtype_3D", StringComparison.Ordinal)).ToHashSet();
+                foreach (var removed in _gpuCounters.Keys.Where(x => !names.Contains(x)).ToArray())
+                { _gpuCounters[removed].Dispose(); _gpuCounters.Remove(removed); }
+                foreach (var name in names.Where(x => !_gpuCounters.ContainsKey(x)))
+                {
+                    PerformanceCounter? counter = null;
+                    try
+                    {
+                        counter = new PerformanceCounter("GPU Engine", "Utilization Percentage", name, true);
+                        counter.NextValue();
+                        _gpuCounters.Add(name, counter);
+                        counter = null; // Ownership moved to the cache.
+                    }
+                    catch { /* A process/engine can disappear while enumerating. */ }
+                    finally { counter?.Dispose(); }
+                }
+            }
+            catch { ReleaseGpuCounters(resetDiscovery: false); }
+        }
+        if (_gpuCounters.Count == 0) return null;
+        var engines = new Dictionary<string, double>();
+        foreach (var pair in _gpuCounters)
+        {
+            try
+            {
+                var luidIndex = pair.Key.IndexOf("luid_", StringComparison.Ordinal);
+                var key = luidIndex >= 0 ? pair.Key[luidIndex..] : pair.Key;
+                engines[key] = engines.GetValueOrDefault(key) + pair.Value.NextValue();
+            }
+            catch { /* Stale counters are removed during the next discovery. */ }
+        }
+        return engines.Count == 0 ? null : Math.Clamp(engines.Values.Max(), 0, 100);
+    }
+
+    private void ReleaseGpuCounters(bool resetDiscovery = true)
+    {
+        foreach (var counter in _gpuCounters.Values) counter.Dispose();
+        _gpuCounters.Clear();
+        if (resetDiscovery) _lastDiscovery = DateTime.MinValue;
+    }
+    public static SystemMetrics ReadMemorySnapshot()
+    {
+        var memory = new MemoryStatus { Length = (uint)Marshal.SizeOf<MemoryStatus>() };
+        if (!GlobalMemoryStatusEx(ref memory) || memory.TotalPhysical == 0) return new(null, null, null, null, null);
+        return new(null, null, memory.MemoryLoad, (memory.TotalPhysical - memory.AvailablePhysical) / 1073741824d, memory.TotalPhysical / 1073741824d);
+    }
+    public void Dispose()
+    {
+        _disposed = true; _active = false; _timer.Dispose();
+        // Either this thread or the in-flight sampler owns counter cleanup, never both.
+        if (Interlocked.CompareExchange(ref _sampling, 1, 0) == 0)
+        {
+            try { ReleaseGpuCounters(); }
+            finally { Volatile.Write(ref _sampling, 0); }
+        }
+    }
+    [DllImport("kernel32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetSystemTimes(out ulong idle, out ulong kernel, out ulong user);
+    [DllImport("kernel32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GlobalMemoryStatusEx(ref MemoryStatus status);
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MemoryStatus
+    {
+        public uint Length, MemoryLoad;
+        public ulong TotalPhysical, AvailablePhysical, TotalPageFile, AvailablePageFile,
+            TotalVirtual, AvailableVirtual, AvailableExtendedVirtual;
     }
 }

@@ -1,0 +1,37 @@
+PASS Turkish multi-step calls execute real fixture moves and alarms
+PASS Unknown tools and repeated bad calls terminate without side effects
+PASS Missing parameters rejected by executor
+PASS Traversal and sibling-prefix escape blocked
+PASS Symlink scope and target escape blocked
+PASS Destination collision skipped without overwrite
+PASS Changed source rejected after plan
+PASS Locked file not moved
+PASS Partial cancellation keeps completed journal and supports undo
+PASS Repeated mutation and reopening cannot move twice
+PASS Undo preserves changed destination and original-name collisions
+PASS Untrusted file text cannot authorize extra scope
+PASS No time is invented for Alarm kur
+PASS Alarm create retry, update, snooze and cancellation are durable
+PASS Alarm registration failure never reports success; reopen reconciles
+PASS Past dates and DST invalid/ambiguous wall times are rejected
+PASS Weekdays recur at local wall time across UTC offset changes
+PASS Alarm delivery is claimed once and repeats without model
+PASS Fake model success after failed tool is never Completed
+PASS Only loopback model endpoint accepted; no cloud fallback
+PASS Truncated model JSON and incomplete tool output rejected
+PASS Unavailable Ollama does not prevent persistent alarm operations
+PASS Default context budget can run shipped tool schema
+PASS Concrete approval is required before an unrequested mutation
+PASS Cancelled runtime releases model and accepts later task
+PASS Apply handles 1000 files without per-file model calls
+PASS Reopen reconciles rename completed before outcome record
+PASS Unknown durable receipt is not replayed blindly
+PASS OS-specific device names and normalized parent escapes are refused
+PASS Listing alone cannot complete an organization request
+PASS Negative instructions do not grant mutation authority
+PASS File prompt injection cannot approve an alarm mutation
+PASS Alarm time without a date and unsupported half-hour wording asks
+PASS PDF-only request cannot authorize a whole-folder type plan
+PASS Partial file cancellation propagates a truthful runtime state
+PASS Mentioning a read-only or forbidden second root does not grant writing
+36 passed; 0 failed.

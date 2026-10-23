@@ -1,0 +1,11 @@
+  Geri yüklenecek projeler belirleniyor...
+  /Users/yunusemre/Desktop/Notification-Island/NI.csproj geri yüklendi (94 ms içinde).
+  /Users/yunusemre/Desktop/Notification-Island/Tests/Windows/NI.LayoutChecks.csproj geri yüklendi (94 ms içinde).
+  NI -> /tmp/ni-agent-acceptance/bin/NI/release/NI.dll
+  NI.LayoutChecks -> /tmp/ni-agent-acceptance/bin/NI.LayoutChecks/release/NI.LayoutChecks.dll
+
+Oluşturma başarılı oldu.
+    0 Uyarı
+    0 Hata
+
+Geçen Süre 00:00:00.92
