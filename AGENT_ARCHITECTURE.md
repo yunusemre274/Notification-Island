@@ -1,6 +1,6 @@
 # Yerel görev ve alarm mimarisi
 
-Bu belge mevcut Liquid Glass / Windows 11 kabuğunun üstüne eklenen görev yürütmesini anlatır. Tasarım sistemi ve pencere mimarisi [ARCHITECTURE.md](ARCHITECTURE.md) içindedir. Windows entegrasyonlarının bu geliştirme ortamında çalıştırılmadığı unutulmamalıdır.
+Bu belge glassmorphism / Windows 11 kabuğundaki görev yürütmesini anlatır. Compact inline giriş `AskCommand → ILocalAgentCoordinator → LocalAgentCoordinator` üzerinden aynı ajanı kullanır; ayrı AI paneli yoktur. Plan onayı, iptal ve geri alma küçük dashboard görev kartındadır. Tasarım sistemi ve pencere mimarisi [ARCHITECTURE.md](ARCHITECTURE.md) içindedir. Gerçek model, Windows bildirim izinleri ve fiziksel donanım davranışları fixture testlerinden ayrı doğrulanmalıdır.
 
 ## Görev akışı ve tek doğruluk kaynağı
 

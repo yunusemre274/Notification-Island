@@ -1,0 +1,25 @@
+<UserControl x:Class="NI.Views.Controls.TaskStatusPanel" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:c="clr-namespace:NI.Controls">
+ <Border Style="{StaticResource GlassCard}" Padding="10,7" ToolTip="{Binding TaskCardSummary}">
+  <Grid>
+   <Grid.RowDefinitions><RowDefinition Height="19"/><RowDefinition/><RowDefinition Height="25"/></Grid.RowDefinitions>
+   <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="34"/></Grid.ColumnDefinitions>
+    <TextBlock Text="{Binding TaskCardTitle}" FontSize="11" FontWeight="SemiBold"/>
+    <c:MediaWaveform Grid.Column="1" Height="14" IsPlaying="{Binding IsAssistantBusy}" ReduceMotion="{Binding Appearance.ReduceMotion}" Foreground="{DynamicResource AccentBrush}"/>
+   </Grid>
+   <TextBlock Grid.Row="1" Text="{Binding TaskCardSummary}" FontSize="11" Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" VerticalAlignment="Top" Margin="0,2"/>
+   <Grid Grid.Row="2">
+    <StackPanel Orientation="Horizontal" Visibility="{Binding HasApproval, Converter={StaticResource BoolVisibility}}">
+     <Button Content="Planı onayla" Command="{Binding ApproveTaskCommand}" FontSize="10" MinHeight="24" Padding="8,3" Background="{DynamicResource AccentSurface}"/>
+     <Button Content="Reddet" Command="{Binding RejectTaskCommand}" FontSize="10" MinHeight="24" Padding="8,3" Margin="5,0,0,0"/>
+    </StackPanel>
+    <StackPanel Orientation="Horizontal" Visibility="{Binding HasApproval, Converter={StaticResource NotVisibility}}">
+     <Button Content="İptal" Command="{Binding CancelTaskCommand}" FontSize="10" MinHeight="24" Padding="7,3" Visibility="{Binding IsAssistantBusy, Converter={StaticResource BoolVisibility}}"/>
+     <Button Content="Geri al" Command="{Binding UndoTaskCommand}" FontSize="10" MinHeight="24" Padding="7,3" Margin="0,0,5,0" Visibility="{Binding HasAlarmAlert, Converter={StaticResource NotVisibility}}"/>
+     <Button Content="Ayrıntı" Command="{Binding OperationDetailsCommand}" ToolTip="{Binding OperationDetails}" FontSize="10" MinHeight="24" Padding="7,3" Visibility="{Binding HasAlarmAlert, Converter={StaticResource NotVisibility}}"/>
+     <Button Content="10 dk ertele" Command="{Binding SnoozeAlarmCommand}" FontSize="10" MinHeight="24" Padding="7,3" Visibility="{Binding HasAlarmAlert, Converter={StaticResource BoolVisibility}}"/>
+     <Button Content="Tamam" Command="{Binding DismissAlarmCommand}" FontSize="10" MinHeight="24" Padding="7,3" Margin="5,0,0,0" Visibility="{Binding HasAlarmAlert, Converter={StaticResource BoolVisibility}}"/>
+    </StackPanel>
+   </Grid>
+  </Grid>
+ </Border>
+</UserControl>

@@ -159,14 +159,17 @@ public static class PathGuard
             var rootOffset = IntPtr.Size == 8 ? 8 : 4;
             var lengthOffset = rootOffset + IntPtr.Size;
             var nameOffset = lengthOffset + 4;
-            var rename = Marshal.AllocHGlobal(nameOffset + pathBytes.Length);
+            // Win32's rename normalization may read a terminating WCHAR even though
+            // FileNameLength excludes it. An unterminated buffer produced random suffixes.
+            var renameSize = nameOffset + pathBytes.Length + sizeof(char);
+            var rename = Marshal.AllocHGlobal(renameSize);
             try
             {
-                for (var i = 0; i < nameOffset; i++) Marshal.WriteByte(rename, i, 0); // ReplaceIfExists=false
+                for (var i = 0; i < renameSize; i++) Marshal.WriteByte(rename, i, 0); // ReplaceIfExists=false; terminated filename
                 Marshal.WriteIntPtr(rename, rootOffset, IntPtr.Zero);
                 Marshal.WriteInt32(rename, lengthOffset, pathBytes.Length);
                 Marshal.Copy(pathBytes, 0, rename + nameOffset, pathBytes.Length);
-                if (!SetFileInformationByHandle(sourceHandle, 3, rename, (uint)(nameOffset + pathBytes.Length)))
+                if (!SetFileInformationByHandle(sourceHandle, 3, rename, (uint)renameSize))
                     throw new IOException("Aynı dosya sistemi içinde güvenli taşıma başarısız: " + Marshal.GetLastWin32Error());
                 var final = new StringBuilder(32768);
                 var count = GetFinalPathNameByHandleW(sourceHandle, final, (uint)final.Capacity, 0);
@@ -174,7 +177,11 @@ public static class PathGuard
                 if (resolved.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase)) resolved = @"\\" + resolved[8..];
                 else if (resolved.StartsWith(@"\\?\", StringComparison.Ordinal)) resolved = resolved[4..];
                 if (count == 0 || !Path.GetFullPath(destination).Equals(resolved, StringComparison.OrdinalIgnoreCase))
-                    throw new IOException("Taşımanın hedefi doğrulanamadı; günlük uzlaştırması gerekli.");
+                {
+                    var error = new IOException("Taşımanın hedefi doğrulanamadı; günlük uzlaştırması gerekli.");
+                    error.Data["ExpectedPath"] = Path.GetFullPath(destination); error.Data["ResolvedPath"] = resolved;
+                    throw error;
+                }
             }
             finally { Marshal.FreeHGlobal(rename); }
         }

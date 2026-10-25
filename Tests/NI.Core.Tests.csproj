@@ -17,5 +17,7 @@
     <Compile Include="../Models/NotificationItem.cs" Link="Models/NotificationItem.cs"/>
     <Compile Include="../Services/Notifications/INotificationProvider.cs" Link="Notifications/INotificationProvider.cs"/>
     <Compile Include="../Services/Notifications/NotificationRouter.cs" Link="Notifications/NotificationRouter.cs"/>
+    <Compile Include="../Services/Media/MediaSourceKind.cs" Link="Media/MediaSourceKind.cs"/>
+    <Compile Include="../Services/Diagnostics/CrashLog.cs" Link="Diagnostics/CrashLog.cs"/>
   </ItemGroup>
 </Project>

@@ -16,9 +16,9 @@ public static class ThemeManager
     {
         var (r, g, b) = settings.Theme switch
         {
-            GlassTheme.DarkerGlass => (12, 16, 23),
-            GlassTheme.BlueGlass => (24, 42, 64),
-            _ => (23, 31, 45)
+            GlassTheme.DarkerGlass => (15, 24, 38),
+            GlassTheme.BlueGlass => (28, 49, 78),
+            _ => (24, 37, 56)
         };
         var alpha = nativeBackdrop ? (byte)Math.Round(settings.SurfaceOpacity * 255) : (byte)255;
         SetBrush("SurfaceBrush", Color.FromArgb(alpha, (byte)r, (byte)g, (byte)b));
@@ -42,7 +42,6 @@ public static class ThemeManager
             SetBrush("TextMuted", Color.FromRgb(130, 145, 166));
             SetBrush("AccentBrush", Color.FromRgb(168, 199, 250));
         }
-        Application.Current.Resources["PanelRadius"] = new CornerRadius(settings.CornerRadius);
     }
     private static void SetBrush(string name, Color color)
     {

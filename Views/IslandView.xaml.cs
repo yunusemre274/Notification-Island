@@ -3,6 +3,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Input;
+using System.Windows.Threading;
 using NI.ViewModels;
 
 namespace NI.Views;
@@ -26,6 +28,14 @@ public partial class IslandView : UserControl
     private bool MotionEnabled => _observed != null && !_observed.Appearance.ReduceMotion && SystemParameters.ClientAreaAnimation;
     private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(IslandVM.IsTaskInputOpen) && _observed?.IsTaskInputOpen == true)
+            Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() =>
+            {
+                if (_observed?.IsTaskInputOpen != true) return;
+                if (Window.GetWindow(this) is { } window) FocusManager.SetFocusedElement(window, TaskInputBox);
+                TaskInputBox.Focus(); Keyboard.Focus(TaskInputBox);
+                TaskInputBox.CaretIndex = TaskInputBox.Text.Length;
+            }));
         if (e.PropertyName == nameof(IslandVM.SummaryTitle) && MotionEnabled)
             SummaryContent.BeginAnimation(OpacityProperty, new DoubleAnimation(.55, 1, TimeSpan.FromMilliseconds(130)));
     }

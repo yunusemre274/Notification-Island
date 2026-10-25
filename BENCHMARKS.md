@@ -1,6 +1,21 @@
 # Ölçümler ve doğrulama durumu
 
-## Ortam ve baseline
+## 2026-10-26 Windows glassmorphism doğrulaması
+
+Windows x64 build 26200, yerel .NET SDK 8.0.427 / Desktop Runtime 8.0.33 üzerinde:
+
+- Release derlemesi: 0 hata, 0 uyarı.
+- Çekirdek: 18 geçti; ajan: 36 geçti, 0 başarısız, 1 symlink ayrıcalığı nedeniyle atlandı.
+- Gerçek WPF `MainWindow`: 26 render ve 173 durum/yerleşim/klavye/animasyon/native region/yeniden gösterme kontrolü geçti. Kullanıcı ayarları yerine izole servis ve depolar kullanıldı.
+- Gerçek ürün normal çalıştırma betiğiyle açıldı; kısa açılış kontrolünde süreç yanıt verdi ve yeni `NI.exe` yönetilen çökme olayı bulunmadı.
+
+Ham kısa ürün örneği: `artifacts/layout-checks/production-smoke.json`. 10,019 saniyede ölçüm çözünürlüğünde CPU **tek çekirdeğin %0’ı**, Private Bytes **116.178.944 bayt (~110,8 MiB)**, working set **190.214.144 bayt** ve **632 handle** gözlendi. Bu tek compact örnektir; 60 saniyelik kabul profili, waveform/expanded/AI senaryoları, süreç ailesi p95/tepe veya uzun dönem sızıntı ölçümü değildir. **20.000.000 bayt bellek hedefi bu örnekte sağlanmıyor.** Kısa CPU örneği sürekli %0 CPU garantisi değildir. DWM ve Ollama kaynakları bu sayıya dahil değildir.
+
+PNG’ler ve boş binding hata günlüğü `artifacts/layout-checks/` altındadır. WPF PNG’leri native Acrylic’in masaüstüyle birleşmiş görüntüsünü kanıtlamaz; region geometrisi ayrıca doğrulanır. Gerçek yerel LLM, fiziksel donanım, MSIX izinleri ve diğer DPI/Windows sürümleri canlı kabul testleri gerektirir.
+
+## Önceki ortam ve baseline
+
+Windows ürün örneği araç oturumunun izole masaüstünde çalıştırılmıştır; kullanıcının interaktif masaüstünde görünür olduğunu kanıtlamaz. Bu örnek sonradan normal kapatılmıştır. Tek-örnek kilidi desktop kimliğine ayrılmış ve tekrar açılışta gizli pencerenin geri gösterilmesi Windows testine eklenmiştir.
 
 İncelenen commit: `094c548d4aecbf9701fcf8aa5bcd7d29a57ba8a5`. Çalışma ağacı önceden Liquid Glass değişiklikleriyle dirty idi; korunmuştur. Önceki diff ve untracked dosyaların yedeği geliştirme ortamında `/tmp/notification-island-before-agent*` altında alındı; git geçmişi değiştirilmedi.
 

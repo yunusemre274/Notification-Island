@@ -11,7 +11,7 @@ using NI.Models;
 namespace NI.Services.Agent;
 
 public sealed class LocalAgentCoordinator(AppSettings settings, AlarmService alarms,
-    Func<string, JsonElement, ToolContext, CancellationToken, Task<ToolResult>> systemTools) : IDisposable
+    Func<string, JsonElement, ToolContext, CancellationToken, Task<ToolResult>> systemTools) : ILocalAgentCoordinator
 {
     private readonly string _directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NotificationIsland", "agent");
     private AgentRuntime? _runtime;

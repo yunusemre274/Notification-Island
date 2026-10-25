@@ -17,6 +17,8 @@ public sealed class MediaSessionService : IMediaService
     private long _generation;
     public bool HasSession => _session != null;
     public bool IsPlaying { get; private set; }
+    public string SourceAppUserModelId { get; private set; } = "";
+    public MediaSourceKind SourceKind { get; private set; }
     public string TrackTitle { get; private set; } = "";
     public string ArtistName { get; private set; } = "";
     public BitmapImage? AlbumArtwork { get; private set; }
@@ -67,12 +69,15 @@ public sealed class MediaSessionService : IMediaService
             {
                 TrackTitle = ArtistName = ""; AlbumArtwork = null;
                 CurrentPosition = TotalDuration = TimeSpan.Zero; IsPlaying = false;
+                SourceAppUserModelId = ""; SourceKind = MediaSourceKind.Generic;
             }
             else
             {
                 var properties = await session.TryGetMediaPropertiesAsync();
                 if (_disposed || generation != _generation) return;
                 TrackTitle = properties.Title ?? ""; ArtistName = properties.Artist ?? "";
+                SourceAppUserModelId = session.SourceAppUserModelId ?? "";
+                SourceKind = MediaSourceClassifier.Classify(SourceAppUserModelId, properties.AlbumTitle, properties.AlbumArtist);
                 AlbumArtwork = null;
                 if (_progressVisible && properties.Thumbnail != null)
                 {

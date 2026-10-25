@@ -2,6 +2,8 @@ using System.Text.Json;
 using NI.Configuration;
 using NI.Models;
 using NI.Services.Notifications;
+using NI.Services.Media;
+using NI.Services.Diagnostics;
 
 var passed = 0;
 var failed = 0;
@@ -124,6 +126,40 @@ await Check("Malformed JSON is backed up before defaults may replace it", () =>
     }
     finally { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
 });
+await Check("Media branding uses source identity and explicit browser metadata", () =>
+{
+    Assert(MediaSourceClassifier.Classify("Spotify.exe") == MediaSourceKind.Spotify);
+    Assert(MediaSourceClassifier.Classify("SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify") == MediaSourceKind.Spotify);
+    Assert(MediaSourceClassifier.Classify("YouTubeMusic") == MediaSourceKind.YouTube);
+    Assert(MediaSourceClassifier.Classify("chrome.exe", "YouTube") == MediaSourceKind.YouTube);
+    Assert(MediaSourceClassifier.Classify("msedge.exe", null, "YouTube Music") == MediaSourceKind.YouTube);
+    Assert(MediaSourceClassifier.Classify("chrome.exe", "Some album", "Some artist") == MediaSourceKind.Generic);
+    Assert(MediaSourceClassifier.Classify("firefox.exe") == MediaSourceKind.Generic);
+    Assert(MediaSourceClassifier.Classify("OtherPlayer", "YouTube") == MediaSourceKind.Generic);
+    Assert(MediaSourceClassifier.Classify(null) == MediaSourceKind.Generic);
+});
+
+await Check("Crash diagnostics preserve exceptions and rotate old logs in isolated storage", () =>
+{
+    var directory = Path.Combine(Path.GetTempPath(), "ni-log-test-" + Guid.NewGuid());
+    var previous = Environment.GetEnvironmentVariable("NI_LOG_DIRECTORY");
+    try
+    {
+        Environment.SetEnvironmentVariable("NI_LOG_DIRECTORY", directory);
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(Path.Combine(directory, "crash.log"), new string('x', 262145));
+        CrashLog.Write("fixture", new InvalidOperationException("diagnostic-fixture"));
+        Assert(File.Exists(Path.Combine(directory, "crash.log.previous")));
+        var log = File.ReadAllText(Path.Combine(directory, "crash.log"));
+        Assert(log.Contains("[fixture]") && log.Contains("InvalidOperationException") && log.Contains("diagnostic-fixture"));
+    }
+    finally
+    {
+        Environment.SetEnvironmentVariable("NI_LOG_DIRECTORY", previous);
+        if (Directory.Exists(directory)) Directory.Delete(directory, true);
+    }
+});
+
 Console.WriteLine($"{passed} passed; {failed} failed.");
 return failed == 0 ? 0 : 1;
 

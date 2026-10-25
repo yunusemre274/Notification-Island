@@ -22,13 +22,28 @@ if (args.Contains("--live"))
 }
 var passed = 0;
 var failed = 0;
+var skipped = 0;
+await Check("Handle rename preserves exact Unicode filename and file identity", () =>
+{
+    using var f = new Fixture();
+    foreach (var name in new[] { "a.pdf", "b.pdf", "özel_ürün.pdf" })
+    {
+        f.File(name, "test");
+        var source = Path.Combine(f.Root, name); var target = Path.Combine(f.Root, "Belgeler", name);
+        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        var before = PathGuard.Stamp(source, default);
+        PathGuard.MoveVerified(source, target, before, default);
+        Assert(File.Exists(target) && !File.Exists(source) && PathGuard.Stamp(target, default) == before, new { name });
+    }
+    Assert(Directory.GetFiles(Path.Combine(f.Root, "Belgeler")).Length == 3);
+});
 await Check("Turkish multi-step calls execute real fixture moves and alarms", async () =>
 {
     using var f = new Fixture(); f.File("a.pdf", "hello"); f.File("b.png", "image");
     var model = new BatchModel();
     using var runtime = new AgentRuntime(model, f.Tools, new() { MaxContextCharacters = 20000 });
     var result = await runtime.RunAsync("Masaüstümü düzenle; belgeleri, görselleri ve arşivleri ayır. Yarın sabah 08.30'a alarm kur.");
-    Assert(result.State == AgentTaskState.Completed && result.VerifiedChanges == 3 && File.Exists(Path.Combine(f.Root, "Belgeler", "a.pdf")) && f.Alarms.List().Count == 1);
+    Assert(result.State == AgentTaskState.Completed && result.VerifiedChanges == 3 && File.Exists(Path.Combine(f.Root, "Belgeler", "a.pdf")) && f.Alarms.List().Count == 1, result);
 });
 await Check("Unknown tools and repeated bad calls terminate without side effects", async () =>
 {
@@ -52,7 +67,11 @@ await Check("Traversal and sibling-prefix escape blocked", () =>
 await Check("Symlink scope and target escape blocked", () =>
 {
     using var f = new Fixture(); var outside = Path.Combine(f.Base, "outside"); Directory.CreateDirectory(outside);
-    var link = Path.Combine(f.Root, "Belgeler"); Directory.CreateSymbolicLink(link, outside); f.File("a.pdf", "data");
+    var link = Path.Combine(f.Root, "Belgeler");
+    try { Directory.CreateSymbolicLink(link, outside); }
+    catch (IOException ex) when (OperatingSystem.IsWindows() && (ex.HResult & 0xFFFF) == 1314)
+    { throw new SkipTestException("Windows symlink creation requires Developer Mode or administrator privilege; link guard was not exercised."); }
+    f.File("a.pdf", "data");
     Throws(() => f.Files.Prepare("desktop", "type", Guid.NewGuid().ToString("N"), default)); Assert(!File.Exists(Path.Combine(outside, "a.pdf")));
 });
 await Check("Destination collision skipped without overwrite", () =>
@@ -77,8 +96,9 @@ await Check("Partial cancellation keeps completed journal and supports undo", ()
     using var f = new Fixture(); f.File("a.pdf", "one"); f.File("b.pdf", "two"); var id = f.Prepare();
     using var cancel = new CancellationTokenSource();
     var result = f.Files.Apply("desktop", id, cancel.Token, (_, complete, _) => { if (complete == 1) cancel.Cancel(); });
-    Assert(!result.Success && result.VerifiedChanges == 1);
-    Assert(f.Files.Undo(id, default).VerifiedChanges == 1 && File.Exists(Path.Combine(f.Root, "a.pdf")) && File.Exists(Path.Combine(f.Root, "b.pdf")));
+    Assert(!result.Success && result.VerifiedChanges == 1, result);
+    var undo = f.Files.Undo(id, default);
+    Assert(undo.VerifiedChanges == 1 && File.Exists(Path.Combine(f.Root, "a.pdf")) && File.Exists(Path.Combine(f.Root, "b.pdf")), undo);
 });
 await Check("Repeated mutation and reopening cannot move twice", () =>
 {
@@ -91,7 +111,7 @@ await Check("Undo preserves changed destination and original-name collisions", (
 {
     using var f = new Fixture(); f.File("a.pdf", "one"); var id = f.Prepare(); f.Files.Apply("desktop", id, default);
     f.File("a.pdf", "new user file"); var undo = f.Files.Undo(id, default);
-    Assert(!undo.Success && File.ReadAllText(Path.Combine(f.Root, "a.pdf")) == "new user file");
+    Assert(!undo.Success && File.ReadAllText(Path.Combine(f.Root, "a.pdf")) == "new user file", undo);
 });
 await Check("Untrusted file text cannot authorize extra scope", () =>
 {
@@ -205,7 +225,8 @@ await Check("Reopen reconciles rename completed before outcome record", () =>
     var journal = new OperationJournal(f.Journal); var row = JsonSerializer.Deserialize<MoveRow>(System.IO.File.ReadAllLines(journal.PlanPath(id))[0], AgentJson.Options)!;
     journal.Save(journal.Read(id) with { State = "Applying" }); journal.WriteOutcome(id, 0, new("Intent", "Crash fixture"));
     Directory.CreateDirectory(Path.Combine(f.Root, "Belgeler")); System.IO.File.Move(Path.Combine(f.Root, "a.pdf"), Path.Combine(f.Root, "Belgeler", "a.pdf"));
-    f.Files.ReconcileInterrupted(); Assert(journal.Read(id).Completed == 1 && f.Files.Undo(id, default).VerifiedChanges == 1);
+    f.Files.ReconcileInterrupted(); var undo = f.Files.Undo(id, default);
+    Assert(journal.Read(id).Completed == 1 && undo.VerifiedChanges == 1, new { operation = journal.Read(id), undo });
 });
 await Check("Unknown durable receipt is not replayed blindly", () =>
 {
@@ -257,24 +278,26 @@ await Check("Partial file cancellation propagates a truthful runtime state", asy
     using var runtime = new AgentRuntime(new FakeModel(new ModelTurn("", [Call("files_apply_moves", new { scope = "desktop", operationId = id })])), f.Tools, new());
     runtime.Changed += (_, state) => { if (state.Summary.Contains("1 / 2")) runtime.Cancel(); };
     var result = await runtime.RunAsync("Masaüstümü düzenle");
-    Assert(result.State == AgentTaskState.PartiallyCompleted && result.VerifiedChanges == 1 && !runtime.IsActive);
+    Assert(result.State == AgentTaskState.PartiallyCompleted && result.VerifiedChanges == 1 && !runtime.IsActive, result);
 });
 await Check("Mentioning a read-only or forbidden second root does not grant writing", () =>
 {
     var grant = PermissionGrant.FromUser("Masaüstümü düzenle. İndirilenlere dokunma.");
     Assert(grant.WriteScopes.SetEquals(new[] { "desktop" }) && !grant.ReadScopes.Contains("downloads"));
 });
-Console.WriteLine($"{passed} passed; {failed} failed."); return failed == 0 ? 0 : 1;
+Console.WriteLine($"{passed} passed; {failed} failed; {skipped} skipped."); return failed == 0 ? 0 : 1;
 
 ToolCall Call(string name, object args) => new(name, AgentJson.Element(args));
-void Assert(bool condition) { if (!condition) throw new Exception("Assertion failed"); }
+void Assert(bool condition, object? details = null) { if (!condition) throw new Exception("Assertion failed: " + JsonSerializer.Serialize(details, AgentJson.Options)); }
 void Throws(Action body) { try { body(); } catch { return; } throw new Exception("Expected rejection"); }
 async Task ThrowsAsync(Func<Task> body) { try { await body(); } catch { return; } throw new Exception("Expected rejection"); }
 async Task Check(string name, Delegate body)
 {
     try { if (body is Action a) a(); else await ((Func<Task>)body)(); passed++; Console.WriteLine("PASS " + name); }
+    catch (SkipTestException ex) { skipped++; Console.WriteLine("SKIP " + name + ": " + ex.Message); }
     catch (Exception ex) { failed++; Console.WriteLine("FAIL " + name + ": " + ex); }
 }
+sealed class SkipTestException(string message) : Exception(message);
 sealed class Fixture : IDisposable
 {
     public string Base { get; } = Path.Combine(OperatingSystem.IsMacOS() ? Path.GetTempPath().Replace("/var/", "/private/var/") : Path.GetTempPath(), "ni-agent-" + Guid.NewGuid());

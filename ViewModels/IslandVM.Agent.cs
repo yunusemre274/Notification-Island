@@ -14,19 +14,26 @@ namespace NI.ViewModels;
 
 public sealed partial class IslandVM
 {
-    private LocalAgentCoordinator? _agent;
+    private ILocalAgentCoordinator? _agent;
     private AlarmHost? _alarmHost;
     private DispatcherTimer? _taskSummaryTimer;
     private TaskSnapshot? _taskSnapshot;
     private string _taskSummary = "", _approvalText = "", _approvalHash = "", _alarmInput = "";
     private bool _showTaskSummary;
+    private int _alarmPage;
     private readonly Queue<AlarmDelivery> _alarmAlerts = new();
     public string TaskSummary => _taskSummary;
-    public bool HasTaskSummary => IsAssistantBusy || _showTaskSummary;
+    public bool HasTaskSummary => IsAssistantBusy || _showTaskSummary || HasApproval;
     public string TaskDetails => _taskSnapshot == null ? "Henüz görev çalıştırılmadı." : $"{_taskSnapshot.State} • {_taskSnapshot.CompletedSteps} doğrulanmış araç sonucu • {_taskSnapshot.VerifiedChanges} değişiklik";
-    public string ApprovalText { get => _approvalText; private set { Set(ref _approvalText, value); Raise(nameof(HasApproval)); } }
+    public string ApprovalText { get => _approvalText; private set { if (Set(ref _approvalText, value)) { Raise(nameof(HasApproval)); RefreshTaskPresentation(); UpdateSummary(); } } }
     public bool HasApproval => !string.IsNullOrEmpty(ApprovalText);
     public ObservableCollection<AlarmRecord> Alarms { get; } = new();
+    public IReadOnlyList<AlarmRecord> VisibleAlarms => Alarms.Skip(_alarmPage * 4).Take(4).ToArray();
+    public int AlarmPageCount => Math.Max(1, (Alarms.Count + 3) / 4);
+    public string AlarmPageLabel => $"{_alarmPage + 1} / {AlarmPageCount}";
+    public bool HasAlarmPages => AlarmPageCount > 1;
+    public RelayCommand PreviousAlarmPageCommand { get; private set; } = null!;
+    public RelayCommand NextAlarmPageCommand { get; private set; } = null!;
     public string AlarmInput { get => _alarmInput; set => Set(ref _alarmInput, value); }
     public bool HasAlarmAlert => _alarmAlerts.Count > 0;
     public string AlarmAlert => _alarmAlerts.TryPeek(out var alert) ? (alert.Missed ? "Kaçırılmış alarm: " : "Alarm: ") + alert.Title : "";
@@ -50,6 +57,9 @@ public sealed partial class IslandVM
     public ICommand SnoozeAlarmCommand { get; private set; } = null!;
     private void InitializeAgentCommands()
     {
+        PreviousAlarmPageCommand = new(_ => { _alarmPage--; RefreshAlarmPage(); }, _ => _alarmPage > 0);
+        NextAlarmPageCommand = new(_ => { _alarmPage++; RefreshAlarmPage(); }, _ => _alarmPage + 1 < AlarmPageCount);
+        Alarms.CollectionChanged += (_, _) => RefreshAlarmPage();
         OperationDetailsCommand = new AsyncCommand(async _ => { if (_agent != null) OperationDetails = await _agent.ReadDetailsAsync(_lifetime.Token); }, ReportError);
         CancelTaskCommand = new RelayCommand(_ => _agent?.Cancel());
         ApproveTaskCommand = new RelayCommand(_ => { _agent?.Approve(_approvalHash, true); ApprovalText = ""; });
@@ -82,21 +92,32 @@ public sealed partial class IslandVM
     }
     private void InitializeAgentServices()
     {
-        if (_alarmHost != null) return;
+        if (_agent != null) return;
         _alarmHost = new AlarmHost();
         _alarmHost.Due += OnAlarmDue; _alarmHost.Start();
-        _agent = new LocalAgentCoordinator(_settings, _alarmHost.Service, ExecuteSystemToolAsync);
-        _agent.Changed += OnTaskChanged; _agent.ApprovalRequired += OnApprovalRequired;
-        try { _agent.RecoverInterrupted(); } catch (Exception ex) { StatusMessage = "Önceki görev kaydı okunamadı: " + ex.GetType().Name; }
+        var coordinator = new LocalAgentCoordinator(_settings, _alarmHost.Service, ExecuteSystemToolAsync);
+        AttachAgent(coordinator);
+        try { coordinator.RecoverInterrupted(); } catch (Exception ex) { StatusMessage = "Önceki görev kaydı okunamadı: " + ex.GetType().Name; }
         _ = RefreshAlarmsAsync();
+    }
+    private void AttachAgent(ILocalAgentCoordinator agent)
+    {
+        _agent = agent;
+        _agent.Changed += OnTaskChanged; _agent.ApprovalRequired += OnApprovalRequired;
     }
     private async Task RunAgentAsync()
     {
-        if (!_settings.EnableAiAssistant) { StatusMessage = "Yerel ajan ayarlarda kapalı; alarmlar kullanılabilir."; return; }
+        if (IsAssistantBusy) return;
+        if (!_settings.EnableAiAssistant) { ShowTransientTaskSummary("Yerel ajan ayarlarda kapalı."); return; }
         if (string.IsNullOrWhiteSpace(AssistantInput)) return;
-        if (_agent == null) { StatusMessage = "Ajan başlatılıyor."; return; }
-        try { var result = await _agent.RunAsync(AssistantInput, _lifetime.Token); OnTaskChanged(_agent, result); }
-        catch (AgentException ex) { AssistantResponse = ex.Message; StatusMessage = ex.Message; }
+        if (_agent == null) { ShowTransientTaskSummary("Ajan başlatılıyor; biraz sonra tekrar deneyin."); return; }
+        var request = AssistantInput.Trim();
+        IsTaskInputOpen = false;
+        IsAssistantBusy = true;
+        ShowTransientTaskSummary("Görev hazırlanıyor…");
+        try { var result = await _agent.RunAsync(request, _lifetime.Token); OnTaskChanged(_agent, result); AssistantInput = ""; }
+        catch (AgentException ex) { AssistantResponse = ex.Message; StatusMessage = ex.Message; ShowTransientTaskSummary(ex.Message); }
+        catch (Exception ex) when (ex is not OperationCanceledException) { AssistantResponse = ex.Message; ShowTransientTaskSummary("Görev tamamlanamadı: " + ex.Message); }
         finally { IsAssistantBusy = false; ApprovalText = ""; UpdateSummary(); await RefreshAlarmsAsync(); }
     }
     private void OnTaskChanged(object? sender, TaskSnapshot snapshot) => OnUi(() =>
@@ -105,11 +126,12 @@ public sealed partial class IslandVM
         IsAssistantBusy = snapshot.EndedAt == null;
         AssistantResponse = snapshot.Summary;
         Raise(nameof(TaskSummary)); Raise(nameof(TaskDetails)); Raise(nameof(HasTaskSummary));
+        RefreshTaskPresentation();
         if (snapshot.EndedAt != null) ShowTransientTaskSummary(snapshot.Summary);
         UpdateSummary();
     });
     private void OnApprovalRequired(object? sender, ApprovalRequest request) => OnUi(() =>
-    { _approvalHash = request.PlanHash; ApprovalText = request.Summary; IsAssistantOpen = true; });
+    { _approvalHash = request.PlanHash; ApprovalText = request.Summary; IsExpanded = true; });
     private void ShowToolResult(ToolResult result)
     {
         StatusMessage = result.UserMessage; AssistantResponse = result.UserMessage;
@@ -122,29 +144,38 @@ public sealed partial class IslandVM
         _taskSummaryTimer.Tick -= OnTaskSummaryExpired; _taskSummaryTimer.Tick += OnTaskSummaryExpired;
         _taskSummaryTimer.Stop(); _taskSummaryTimer.Start();
         Raise(nameof(TaskSummary)); Raise(nameof(HasTaskSummary)); UpdateSummary();
+        RefreshTaskPresentation();
     }
     private void OnTaskSummaryExpired(object? sender, EventArgs e)
-    { _taskSummaryTimer?.Stop(); _showTaskSummary = false; Raise(nameof(HasTaskSummary)); UpdateSummary(); }
+    { _taskSummaryTimer?.Stop(); _showTaskSummary = false; Raise(nameof(HasTaskSummary)); RefreshTaskPresentation(); UpdateSummary(); }
     private async Task RefreshAlarmsAsync()
     {
         if (_disposed || _alarmHost == null) return;
         try
         {
             var records = await Task.Run(() => _alarmHost.Service.List().Where(x => x.State != "Cancelled").Take(12).ToArray());
-            OnUi(() => { Alarms.Clear(); foreach (var alarm in records) Alarms.Add(alarm); });
+            OnUi(() => { Alarms.Clear(); foreach (var alarm in records) Alarms.Add(alarm); Raise(nameof(VisibleAlarms)); });
         }
         catch (Exception ex) { OnUi(() => StatusMessage = "Alarm deposu okunamadı: " + ex.GetType().Name); }
+    }
+    private void RefreshAlarmPage()
+    {
+        _alarmPage = Math.Clamp(_alarmPage, 0, AlarmPageCount - 1);
+        Raise(nameof(VisibleAlarms)); Raise(nameof(AlarmPageLabel)); Raise(nameof(HasAlarmPages));
+        PreviousAlarmPageCommand.Refresh(); NextAlarmPageCommand.Refresh();
     }
     private void OnAlarmDue(object? sender, AlarmDelivery delivery) => OnUi(() =>
     {
         if (_alarmAlerts.Count < 256) _alarmAlerts.Enqueue(delivery);
         Raise(nameof(HasAlarmAlert)); Raise(nameof(AlarmAlert)); UpdateSummary();
+        RefreshTaskPresentation();
         IsExpanded = true; AlarmHost.SignalSound(); _ = RefreshAlarmsAsync();
     });
     private void DismissAlarm()
     {
         if (_alarmAlerts.Count > 0) _alarmAlerts.Dequeue();
         Raise(nameof(HasAlarmAlert)); Raise(nameof(AlarmAlert)); UpdateSummary();
+        RefreshTaskPresentation();
     }
     private async Task<ToolResult> ExecuteSystemToolAsync(string name, JsonElement args, ToolContext context, CancellationToken token)
     {

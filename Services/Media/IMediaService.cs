@@ -6,6 +6,8 @@ public interface IMediaService : IDisposable
 {
     bool HasSession { get; }
     bool IsPlaying { get; }
+    string SourceAppUserModelId { get; }
+    MediaSourceKind SourceKind { get; }
     string TrackTitle { get; }
     string ArtistName { get; }
     BitmapImage? AlbumArtwork { get; }

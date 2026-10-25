@@ -26,6 +26,6 @@ public sealed class IslandIcon : TextBlock
         "Play" => "\uE768", "Pause" => "\uE769", "Previous" => "\uE892", "Next" => "\uE893",
         "Music" => "\uE8D6", "Cpu" => "\uE950", "Gpu" => "\uE7F4", "Memory" => "\uE964",
         "Check" => "\uE73E", "Weather" => "\uE9BD", "Assistant" => "\uE99A",
-        "External" => "\uE8A7", "Power" => "\uE7E8", _ => "\uE7F4"
+        "External" => "\uE8A7", "Power" => "\uE7E8", "Send" => "\uE724", _ => "\uE7F4"
     };
 }

@@ -7,25 +7,37 @@
     <SolidColorBrush po:Freeze="True" x:Key="TextMuted" Color="#8291A6"/>
     <SolidColorBrush po:Freeze="True" x:Key="AccentBrush" Color="#A8C7FA"/>
     <SolidColorBrush po:Freeze="True" x:Key="AccentSurface" Color="#243E6392"/>
-    <SolidColorBrush po:Freeze="True" x:Key="SurfaceBrush" Color="#CC171F2D"/>
-    <SolidColorBrush po:Freeze="True" x:Key="CardBrush" Color="#0AFFFFFF"/>
-    <SolidColorBrush po:Freeze="True" x:Key="InputSurface" Color="#182330"/>
+    <SolidColorBrush po:Freeze="True" x:Key="SurfaceBrush" Color="#9E182538"/>
+    <SolidColorBrush po:Freeze="True" x:Key="CardBrush" Color="#0FFFFFFF"/>
+    <SolidColorBrush po:Freeze="True" x:Key="InputSurface" Color="#F01C2B42"/>
     <SolidColorBrush po:Freeze="True" x:Key="HoverBrush" Color="#15FFFFFF"/>
-    <SolidColorBrush po:Freeze="True" x:Key="StrokeBrush" Color="#16FFFFFF"/>
+    <SolidColorBrush po:Freeze="True" x:Key="StrokeBrush" Color="#20D8E9FF"/>
     <LinearGradientBrush po:Freeze="True" x:Key="GlassStroke" StartPoint="0,0" EndPoint=".75,1">
-        <GradientStop Color="#50DDEBFF" Offset="0"/>
-        <GradientStop Color="#0DFFFFFF" Offset=".5"/>
-        <GradientStop Color="#22DDEBFF" Offset="1"/>
+        <GradientStop Color="#70E1EEFF" Offset="0"/>
+        <GradientStop Color="#20D9E9FF" Offset=".5"/>
+        <GradientStop Color="#35C5DAF7" Offset="1"/>
     </LinearGradientBrush>
     <LinearGradientBrush po:Freeze="True" x:Key="GlassSheen" StartPoint="0,0" EndPoint=".8,1">
-        <GradientStop Color="#0DDDEBFF" Offset="0"/>
-        <GradientStop Color="#00FFFFFF" Offset=".48"/>
+        <GradientStop Color="#18DDEBFF" Offset="0"/>
+        <GradientStop Color="#04FFFFFF" Offset=".45"/>
+        <GradientStop Color="#0703152A" Offset="1"/>
     </LinearGradientBrush>
     <FontFamily x:Key="UiFont">Segoe UI Variable Text, Segoe UI</FontFamily>
     <CornerRadius x:Key="PanelRadius">24</CornerRadius>
-    <CornerRadius x:Key="CardRadius">16</CornerRadius>
+    <CornerRadius x:Key="CardRadius">14</CornerRadius>
+    <CornerRadius x:Key="ControlRadius">10</CornerRadius>
+    <Thickness x:Key="GlassBorderThickness">1</Thickness>
+    <Thickness x:Key="CardPadding">10</Thickness>
     <Thickness x:Key="PanelPadding">18,8,18,16</Thickness>
     <sys:Double x:Key="SpaceSmall">8</sys:Double>
     <sys:Double x:Key="SpaceMedium">12</sys:Double>
     <sys:Double x:Key="SpaceLarge">18</sys:Double>
+    <sys:Double x:Key="FontCaption">10</sys:Double>
+    <sys:Double x:Key="FontBody">12</sys:Double>
+    <sys:Double x:Key="FontMetric">19</sys:Double>
+    <sys:Double x:Key="IconSmall">16</sys:Double>
+    <sys:Double x:Key="IconMedium">20</sys:Double>
+    <sys:Double x:Key="DashboardHeight">312</sys:Double>
+    <GridLength x:Key="DashboardRowHeight">312</GridLength>
+    <!-- Native DWM Acrylic supplies blur/depth. No BlurEffect or animated DropShadowEffect. -->
 </ResourceDictionary>

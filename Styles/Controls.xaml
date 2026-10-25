@@ -25,7 +25,21 @@
         <Setter Property="BorderBrush" Value="{DynamicResource StrokeBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="CornerRadius" Value="{StaticResource CardRadius}"/>
-        <Setter Property="Padding" Value="12"/>
+        <Setter Property="Padding" Value="{StaticResource CardPadding}"/>
+    </Style>
+    <Style x:Key="GlassPanel" TargetType="c:GlassSurface">
+        <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource GlassStroke}"/>
+        <Setter Property="BorderThickness" Value="{StaticResource GlassBorderThickness}"/>
+        <Setter Property="CornerRadius" Value="{Binding SurfaceCornerRadius}"/>
+    </Style>
+    <Style x:Key="CompactBarContainer" TargetType="Grid">
+        <Setter Property="Height" Value="{Binding CompactHeight}"/>
+        <Setter Property="Margin" Value="16,0,8,0"/>
+    </Style>
+    <Style x:Key="MediaChip" TargetType="Border" BasedOn="{StaticResource GlassCard}">
+        <Setter Property="CornerRadius" Value="10"/>
+        <Setter Property="Padding" Value="5"/>
     </Style>
     <Style TargetType="Button">
         <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
@@ -41,7 +55,7 @@
         <Setter Property="Template">
             <Setter.Value><ControlTemplate TargetType="Button">
                 <Border x:Name="Surface" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
-                        BorderThickness="1" CornerRadius="10" Padding="{TemplateBinding Padding}">
+                        BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10" Padding="{TemplateBinding Padding}">
                     <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center"/>
                 </Border>
                 <ControlTemplate.Triggers>
@@ -53,6 +67,7 @@
             </ControlTemplate></Setter.Value>
         </Setter>
     </Style>
+    <Style x:Key="GlassButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"/>
     <Style x:Key="IconButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
         <Setter Property="Width" Value="32"/><Setter Property="Height" Value="32"/>
         <Setter Property="Padding" Value="0"/><Setter Property="BorderBrush" Value="Transparent"/>
@@ -104,12 +119,12 @@
     </Style>
     <Style TargetType="c:MetricCard">
         <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="c:MetricCard">
-            <Border Style="{StaticResource GlassCard}" Padding="10,9">
+            <Border Style="{StaticResource GlassCard}" Padding="9,7">
                 <StackPanel>
                     <TextBlock Text="{TemplateBinding Label}" Style="{StaticResource Caption}" FontSize="10"/>
-                    <TextBlock Text="{TemplateBinding ValueText}" Typography.NumeralAlignment="Tabular" FontSize="22" FontWeight="SemiBold" Margin="0,3,0,8"/>
+                    <TextBlock x:Name="MetricValue" Text="{TemplateBinding ValueText}" Typography.NumeralAlignment="Tabular" FontSize="{StaticResource FontMetric}" FontWeight="SemiBold" Margin="0,1,0,3"/>
                     <ProgressBar x:Name="PART_Level" Value="{TemplateBinding Value}" Maximum="100"/>
-                    <TextBlock Text="{TemplateBinding Detail}" Style="{StaticResource Caption}" FontSize="9" Margin="0,7,0,0" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Text="{TemplateBinding Detail}" Style="{StaticResource Caption}" FontSize="9" Margin="0,4,0,0" TextTrimming="CharacterEllipsis" ToolTip="{TemplateBinding Detail}"/>
                 </StackPanel>
             </Border>
         </ControlTemplate></Setter.Value></Setter>
@@ -149,6 +164,57 @@
         <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBoxItem">
             <Border x:Name="ItemSurface" Background="Transparent" CornerRadius="5" Padding="{TemplateBinding Padding}"><ContentPresenter/></Border>
             <ControlTemplate.Triggers><Trigger Property="IsHighlighted" Value="True"><Setter TargetName="ItemSurface" Property="Background" Value="{DynamicResource HoverBrush}"/></Trigger></ControlTemplate.Triggers>
+        </ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <Style TargetType="c:ToggleTile">
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="c:ToggleTile">
+            <Border x:Name="Tile" Style="{StaticResource GlassCard}" Padding="4,5" CornerRadius="10">
+                <Grid><Grid.RowDefinitions><RowDefinition Height="22"/><RowDefinition Height="17"/><RowDefinition Height="15"/></Grid.RowDefinitions>
+                    <c:IslandIcon Kind="{TemplateBinding Icon}" FontSize="18" Foreground="{TemplateBinding Foreground}"/>
+                    <TextBlock Grid.Row="1" Text="{TemplateBinding Title}" FontSize="11" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                    <TextBlock Grid.Row="2" Text="{TemplateBinding Status}" FontSize="9.5" Foreground="{DynamicResource TextSecondary}" HorizontalAlignment="Center"/>
+                </Grid>
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsActive" Value="True"><Setter TargetName="Tile" Property="Background" Value="{DynamicResource AccentSurface}"/><Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/></Trigger>
+                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Tile" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/></Trigger>
+                <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Tile" Property="BorderBrush" Value="{DynamicResource TextPrimary}"/></Trigger>
+                <Trigger Property="IsPressed" Value="True"><Setter TargetName="Tile" Property="Opacity" Value=".7"/></Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <Style x:Key="InlineTaskInput" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+        <Setter Property="Background" Value="{DynamicResource CardBrush}"/>
+        <Setter Property="FontSize" Value="12"/><Setter Property="Padding" Value="10,4"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TextBox">
+            <Border Background="{TemplateBinding Background}" BorderBrush="{DynamicResource StrokeBrush}" BorderThickness="1" CornerRadius="10" Padding="{TemplateBinding Padding}">
+                <Grid>
+                    <ScrollViewer x:Name="PART_ContentHost" VerticalScrollBarVisibility="Disabled" HorizontalScrollBarVisibility="Hidden"/>
+                    <TextBlock x:Name="Placeholder" Text="Bir görev yaz…" Foreground="{DynamicResource TextSecondary}" IsHitTestVisible="False" Visibility="Collapsed"/>
+                </Grid>
+            </Border>
+            <ControlTemplate.Triggers><Trigger Property="Text" Value=""><Setter TargetName="Placeholder" Property="Visibility" Value="Visible"/></Trigger></ControlTemplate.Triggers>
+        </ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <Style TargetType="TabControl">
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TabControl">
+            <Grid><Grid.RowDefinitions><RowDefinition Height="34"/><RowDefinition/></Grid.RowDefinitions>
+                <TabPanel IsItemsHost="True" Background="Transparent"/>
+                <ContentPresenter Grid.Row="1" Margin="0,10,0,0" ContentSource="SelectedContent"/>
+            </Grid>
+        </ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <Style TargetType="TabItem">
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondary}"/>
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TabItem">
+            <Border x:Name="Tab" Background="Transparent" CornerRadius="9" Padding="14,7" Margin="0,0,4,0"><ContentPresenter ContentSource="Header" TextElement.Foreground="{TemplateBinding Foreground}"/></Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsSelected" Value="True"><Setter TargetName="Tab" Property="Background" Value="{DynamicResource AccentSurface}"/><Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/></Trigger>
+                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Tab" Property="Background" Value="{DynamicResource HoverBrush}"/></Trigger>
+            </ControlTemplate.Triggers>
         </ControlTemplate></Setter.Value></Setter>
     </Style>
 </ResourceDictionary>

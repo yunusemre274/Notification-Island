@@ -21,8 +21,8 @@ public sealed class QuickControlsVM : ObservableObject, IDisposable
     public bool BluetoothOn => RadioService.IsBluetoothOn;
     public bool WifiAvailable => RadioService.IsWifiAvailable;
     public bool BluetoothAvailable => RadioService.IsBluetoothAvailable;
-    public string WifiLabel => !WifiAvailable ? "Kullanılamıyor" : WifiOn ? "Açık" : "Kapalı";
-    public string BluetoothLabel => !BluetoothAvailable ? "Kullanılamıyor" : BluetoothOn ? "Açık" : "Kapalı";
+    public string WifiLabel => !WifiAvailable ? "Yok" : WifiOn ? "Açık" : "Kapalı";
+    public string BluetoothLabel => !BluetoothAvailable ? "Yok" : BluetoothOn ? "Açık" : "Kapalı";
     public bool AudioAvailable { get => _audioAvailable; private set => Set(ref _audioAvailable, value); }
     public bool BrightnessAvailable { get => _brightnessAvailable; private set { if (Set(ref _brightnessAvailable, value)) Raise(nameof(BrightnessLabel)); } }
     public string BrightnessLabel => BrightnessAvailable ? $"{Brightness}%" : "Desteklenmiyor";

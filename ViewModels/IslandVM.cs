@@ -7,6 +7,7 @@ using NI.Configuration;
 using NI.Core;
 using NI.Models;
 using NI.Services;
+using NI.Services.Agent;
 using NI.Services.Media;
 using NI.Services.Notifications;
 using NI.Services.SystemMonitoring;
@@ -21,6 +22,7 @@ public sealed partial class IslandVM : ObservableObject, IDisposable
     private readonly INotificationProvider _provider;
     private readonly ISystemMonitor _monitor;
     private readonly IMediaService _media;
+    private (bool HasSession, bool Playing, string Title, string Artist, MediaSourceKind Source, BitmapImage? Artwork)? _lastMediaPresentation;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly DispatcherTimer _clockTimer, _previewTimer, _saveTimer;
     private bool _disposed, _started, _weatherLoading, _connectionsActive;
@@ -46,31 +48,6 @@ public sealed partial class IslandVM : ObservableObject, IDisposable
     public string EmptyDescription => NotificationsConnected ? "Yeni Windows bildirimleri burada görünür." : NotificationStatus;
     public string ConnectLabel => _provider.Access == NotificationAccess.Denied ? "Windows izinlerini aç" : "Bildirimleri bağla";
 
-    private bool _isExpanded, _isSettingsOpen, _isAssistantOpen;
-    public bool IsExpanded
-    {
-        get => _isExpanded;
-        set
-        {
-            if (!Set(ref _isExpanded, value)) return;
-            if (!value) { IsSettingsOpen = false; IsAssistantOpen = false; }
-            UpdateActivity(); Raise(nameof(PanelWidth)); Raise(nameof(BodyMaxHeight));
-        }
-    }
-    public bool IsSettingsOpen
-    {
-        get => _isSettingsOpen;
-        set { if (Set(ref _isSettingsOpen, value)) { if (value) { IsExpanded = true; IsAssistantOpen = false; } UpdateActivity(); Raise(nameof(IsDashboardVisible)); } }
-    }
-    public bool IsAssistantOpen
-    {
-        get => _isAssistantOpen;
-        set { if (Set(ref _isAssistantOpen, value)) { if (value) { IsExpanded = true; IsSettingsOpen = false; } UpdateActivity(); Raise(nameof(IsDashboardVisible)); } }
-    }
-    public bool HasUtilitySections => Appearance.ShowConnections || Appearance.ShowSystemStatus || Appearance.ShowMedia;
-    public bool IsDashboardVisible => !IsSettingsOpen && !IsAssistantOpen;
-    public double PanelWidth => IsExpanded ? Appearance.PanelWidth : Appearance.CompactWidth;
-    public double BodyMaxHeight => Math.Max(180, Appearance.ExpandedMaxHeight - Appearance.CompactHeight - 2);
     private NotificationItem? _preview;
     public NotificationItem? Preview { get => _preview; private set { if (Set(ref _preview, value)) UpdateSummary(); } }
     public bool HasPreview => Appearance.ShowNotificationSummary && Preview != null;
@@ -94,11 +71,15 @@ public sealed partial class IslandVM : ObservableObject, IDisposable
     public string CpuDetail => _metrics.Cpu.HasValue ? "İşlemci" : "Ölçülüyor";
     public string GpuDetail => _metrics.Gpu.HasValue ? "3D motoru" : "Veri yok";
     public string RamDetail => _metrics.TotalGb.HasValue ? $"{_metrics.UsedGb:0.0} / {_metrics.TotalGb:0.#} GB" : "Veri yok";
-    private static string Percent(double? value) => value.HasValue ? $"{Math.Round(value.Value):0}%" : "—";
+    private static string Percent(double? value) => value.HasValue ? $"{Math.Round(value.Value):0}%" : "N/A";
     public bool HasMedia => _media.HasSession;
     public string MediaTitle => HasMedia ? _media.TrackTitle : "Biraz müzik iyi gelir";
     public string MediaArtist => HasMedia ? _media.ArtistName : "Spotify veya başka bir oynatıcı açın";
     public BitmapImage? AlbumArtwork => _media.AlbumArtwork;
+    public MediaSourceKind MediaSource => _media.SourceKind;
+    public string MediaSourceName => MediaSource switch { MediaSourceKind.Spotify => "Spotify", MediaSourceKind.YouTube => "YouTube", _ => "Medya" };
+    public bool IsMediaPlaying => _media.HasSession && _media.IsPlaying;
+    public bool ShowMediaBrand => ShowCompactMedia && !HasPreview;
     public string PlayIcon => _media.IsPlaying ? "Pause" : "Play";
     public string PlayLabel => _media.IsPlaying ? "Duraklat" : "Oynat";
     public double MediaProgress => _media.TotalDuration.TotalSeconds > 0 ? Math.Clamp(100 * _media.CurrentPosition.TotalSeconds / _media.TotalDuration.TotalSeconds, 0, 100) : 0;
@@ -110,7 +91,7 @@ public sealed partial class IslandVM : ObservableObject, IDisposable
     public bool AssistantEnabled => _settings.EnableAiAssistant;
     public string AssistantInput { get => _assistantInput; set => Set(ref _assistantInput, value); }
     public string AssistantResponse { get => _assistantResponse; private set => Set(ref _assistantResponse, value); }
-    public bool IsAssistantBusy { get => _isAssistantBusy; private set => Set(ref _isAssistantBusy, value); }
+    public bool IsAssistantBusy { get => _isAssistantBusy; private set { if (Set(ref _isAssistantBusy, value)) { Raise(nameof(HasTaskSummary)); RefreshTaskPresentation(); } } }
     public string OllamaBaseUrl { get => _settings.OllamaBaseUrl; set { _settings.OllamaBaseUrl = value; Raise(); QueueSave(); } }
     public string OllamaModel { get => _settings.OllamaModel; set { _settings.OllamaModel = value; Raise(); QueueSave(); } }
     public string MaterialStatus { get; private set; } = "Sistem materyali denetleniyor";
@@ -131,7 +112,7 @@ public sealed partial class IslandVM : ObservableObject, IDisposable
     public ICommand DismissStatusCommand { get; }
 
     public IslandVM(AppSettings settings, INotificationProvider provider, ISystemMonitor monitor,
-        IMediaService media, INotificationActionHandler actions)
+        IMediaService media, INotificationActionHandler actions, ILocalAgentCoordinator? agent = null)
     {
         _dispatcher = Dispatcher.CurrentDispatcher; _settings = settings;
         _statusMessage = settings.LoadWarning ?? ""; _provider = provider; _monitor = monitor; _media = media;
@@ -139,7 +120,7 @@ public sealed partial class IslandVM : ObservableObject, IDisposable
         QuickControls = new QuickControlsVM(message => StatusMessage = message);
         ToggleExpandedCommand = new RelayCommand(_ => IsExpanded = !IsExpanded);
         ToggleSettingsCommand = new RelayCommand(_ => IsSettingsOpen = !IsSettingsOpen);
-        ToggleAssistantCommand = new RelayCommand(_ => IsAssistantOpen = !IsAssistantOpen);
+        ToggleAssistantCommand = new RelayCommand(_ => IsTaskInputOpen = !IsTaskInputOpen);
         OpenPreviewCommand = new AsyncCommand(async _ =>
         {
             if (HasPreview && Preview != null) await OpenNotificationAsync(Preview);
@@ -157,6 +138,7 @@ public sealed partial class IslandVM : ObservableObject, IDisposable
         NextCommand = new AsyncCommand(async _ => await MediaActionAsync(_media.TrySkipNextAsync), ReportError);
         AskCommand = new AsyncCommand(async _ => await RunAgentAsync(), ReportError);
         InitializeAgentCommands();
+        InitializePresentationCommands();
         ExitCommand = new RelayCommand(_ => Application.Current.Shutdown());
         DismissStatusCommand = new RelayCommand(_ => StatusMessage = "");
         _clockTimer = new DispatcherTimer { Interval = UntilNextMinute() };
@@ -169,6 +151,7 @@ public sealed partial class IslandVM : ObservableObject, IDisposable
         Notifications.Arrived += OnArrived; Notifications.Changed += OnNotificationsChanged;
         _media.Changed += OnMediaChanged; _monitor.Updated += OnMetrics;
         Appearance.PropertyChanged += OnAppearanceChanged;
+        if (agent != null) AttachAgent(agent);
     }
 
     public async Task StartAsync()
@@ -229,10 +212,15 @@ public sealed partial class IslandVM : ObservableObject, IDisposable
     {
         if (Preview != null && !Notifications.Items.Any(x => x.Id == Preview.Id)) Preview = null;
         Raise(nameof(HasNotifications)); Raise(nameof(NotificationCountText));
+        RefreshNotificationPage();
     }
     private void OnMediaChanged(object? sender, EventArgs e) => OnUi(() =>
     {
-        foreach (var name in new[] { nameof(HasMedia), nameof(MediaTitle), nameof(MediaArtist), nameof(AlbumArtwork), nameof(PlayIcon), nameof(PlayLabel), nameof(MediaProgress), nameof(MediaPosition), nameof(MediaDuration) }) Raise(name);
+        foreach (var name in new[] { nameof(MediaProgress), nameof(MediaPosition), nameof(MediaDuration) }) Raise(name);
+        var presentation = (_media.HasSession, _media.IsPlaying, _media.TrackTitle, _media.ArtistName, _media.SourceKind, _media.AlbumArtwork);
+        if (_lastMediaPresentation == presentation) return;
+        _lastMediaPresentation = presentation;
+        foreach (var name in new[] { nameof(HasMedia), nameof(MediaTitle), nameof(MediaArtist), nameof(AlbumArtwork), nameof(PlayIcon), nameof(PlayLabel), nameof(MediaSource), nameof(MediaSourceName), nameof(IsMediaPlaying) }) Raise(name);
         UpdateSummary();
     });
     private void OnMetrics(object? sender, SystemMetrics metrics) => OnUi(() =>
@@ -243,12 +231,13 @@ public sealed partial class IslandVM : ObservableObject, IDisposable
     });
     private void OnAppearanceChanged(object? sender, PropertyChangedEventArgs e)
     {
-        Raise(nameof(PanelWidth)); Raise(nameof(BodyMaxHeight)); Raise(nameof(HasUtilitySections)); UpdateSummary(); UpdateActivity(); QueueSave();
+        foreach (var name in new[] { nameof(PanelWidth), nameof(CompactHeight), nameof(BodyMaxHeight), nameof(HasUtilitySections), nameof(WindowCornerRadius), nameof(SurfaceCornerRadius) }) Raise(name);
+        UpdateSummary(); UpdateActivity(); QueueSave();
         if (e.PropertyName == nameof(Appearance.ShowWeather)) _ = UpdateWeatherAsync();
     }
     private void UpdateSummary()
     {
-        foreach (var name in new[] { nameof(HasPreview), nameof(ShowCompactMedia), nameof(SummaryTitle), nameof(SummarySubtitle), nameof(SummaryIcon), nameof(PreviewIcon), nameof(HasPreviewIcon) }) Raise(name);
+        foreach (var name in new[] { nameof(HasPreview), nameof(ShowCompactMedia), nameof(ShowMediaBrand), nameof(SummaryTitle), nameof(SummarySubtitle), nameof(SummaryIcon), nameof(PreviewIcon), nameof(HasPreviewIcon) }) Raise(name);
     }
     private void QueueSave() { _saveTimer.Stop(); _saveTimer.Start(); }
     private void OnSave(object? sender, EventArgs e)

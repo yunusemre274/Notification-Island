@@ -1,6 +1,6 @@
 # Notification Island
 
-Windows 10/11 için C# / .NET 8 / WPF masaüstü kontrol ve bildirim barı. Yeni arayüz; slate cam yüzeyler, Fluent ikonlar ve iki kolonlu bir kontrol merkezi kullanır. MVVM, Windows medya oturumları ve yerel Ollama entegrasyonu içerir.
+Windows 10/11 için C# / .NET 8 / WPF masaüstü kontrol ve bildirim barı. Arayüz; koyu mavi-gri cam yüzeyler, native Acrylic, Fluent ikonlar ve kaydırma gerektirmeyen iki kolonlu bir kontrol merkezi kullanır. MVVM, Windows medya oturumları ve yerel Ollama entegrasyonu içerir.
 
 ## Yerel ajan ve kalıcı alarmlar
 
@@ -23,16 +23,60 @@ Normal bellek hedefi **20.000.000 bayt toplam uygulama süreç ailesi Private By
 
 ## Yeni görünüm
 
-- **Compact:** Varsayılan genişlik 460 DIP, içerik yüksekliği 46 DIP. Solda saat; ortada yeni bildirim, medya veya sade idle içerik; isteğe bağlı sıcaklık; sağda genişletme düğmesi. Görev ekleme alanı kaldırıldı.
-- **Expanded:** Varsayılan genişlik 760 DIP, pencere yüksekliği en fazla 460 DIP. Bildirimler solda; Wi-Fi/Bluetooth, ses/parlaklık, CPU/GPU/RAM ve medya sağda. Taşan içerik kaydırılır.
-- **Cam:** DarkGlass, DarkerGlass ve BlueGlass. İnce kenarlık, üst ışık yansıması, düşük doygunluklu vurgu; 160–170 ms açılma/genişlik geçişleri. Sistem ölçüm çizgileri 280 ms geçişle değişir.
-- **Kişiselleştirme:** Compact öğeler, expanded bölümler, yüzey opaklığı, materyal, köşeler, boyutlar, üst/yatay konum, her zaman üstte, hover ile açılma, otomatik daralma ve azaltılmış hareket. Ayarlar panelindeki değişiklikler otomatik kaydedilir.
+- **Compact:** Varsayılan genişlik 460 DIP, içerik yüksekliği 46 DIP. Tek cam kapsül; solda saat, ortada bildirim/medya/görev özeti, sağda görev girişi ve genişletme. Kapsül yarıçapı yüksekliğe göre hesaplanır; native çerçeve ve WPF kırpması aynı sınırı kullanır.
+- **Inline görev:** Robot düğmesi compact barın ortasında metin girişini açar; Enter mevcut yerel ajanı çalıştırır, Escape girişi kapatır. Büyük bir AI paneli yoktur. İşlem ilerlemesi compact özette, plan onayı/iptal/geri alma kontrol merkezindeki küçük görev kartındadır.
+- **Expanded:** Varsayılan genişlik 760 DIP. Sabit 312 DIP içerik gridinde solda bildirimler ve gerektiğinde görev kartı; sağda bağlantılar, ses/parlaklık, CPU/GPU/RAM ve medya bulunur. Panelde scrollbar yoktur. Son 40 bildirim üçlü sayfalarla, görev kartı açıkken tekli sayfalarla erişilebilir. Ayarlar dört sekmeye ayrılır. Eski 420 DIP altındaki yükseklik sınırları okunabilir minimuma yükseltilir.
+- **Medya:** Spotify/YouTube kaynak kimliği veya açık YouTube metadata’sı varsa vektör logo gösterilir. Salt Chrome/Edge kimliği YouTube anlamına gelmez; tanınmayan kaynaklarda generic simge vardır. Dokuz çizgili dekoratif waveform 20 FPS render-transform animasyonu kullanır; pause, gizlenme ve azaltılmış harekette animasyon saatleri kaldırılır. Gerçek ses spektrumu ölçülmez.
+- **Cam:** DarkGlass, DarkerGlass ve BlueGlass; native Acrylic/Mica, yarı saydam tint, ince kenarlık ve iç ışık yansıması. Görsel ağacı bulanıklaştıran `BlurEffect`, sürekli render callback’i ve animasyonlu gölge yoktur. Açılma opacity/transform ile, metrik çizgileri 280 ms geçişle değişir.
+- **Kapanma politikası:** Panel ok düğmesi, Escape veya bir bildirimin kaynak uygulamasını açma eylemiyle kapanır. Hover çıkışı, dışarı tıklama ve odak kaybı paneli kapatmaz. Eski `AutoCollapse` alanı JSON uyumluluğu için korunur; kapanma davranışında kullanılmaz. İsteğe bağlı hover ile açılma, görev girişi açıkken devreye girmez.
+- **Hata kaydı:** Çalıştırma betiği startup/dispatcher hata ayrıntılarını `artifacts/logs/crash.log` dosyasına yönlendirir ve başarısız çıkışta yeni kaydı gösterir. EXE doğrudan açılırsa varsayılan günlük `%LOCALAPPDATA%/NotificationIsland/logs/crash.log` konumundadır. Bozulmuş UI durumunda art arda hata penceresi açmak yerine kontrollü kapanma uygulanır.
+- **Kişiselleştirme:** Compact öğeler, expanded bölümler, opaklık, materyal, panel köşeleri, boyutlar, konum, her zaman üstte, hover ile açılma ve azaltılmış hareket. Ayarlar otomatik kaydedilir.
 
-Repository’de bulunan iki küçük PNG eski ses/Wi-Fi ikonlarıdır; yeni arayüz bunları kullanmaz. İkonlar Windows 11’de Segoe Fluent Icons, Windows 10’da Segoe MDL2 Assets üzerinden çizilir.
+Repository’de bulunan iki küçük PNG eski ses/Wi-Fi ikonlarıdır; yeni arayüz bunları kullanmaz. Genel ikonlar Windows 11’de Segoe Fluent Icons, Windows 10’da Segoe MDL2 Assets üzerinden; medya marka işaretleri çözünürlükten bağımsız vektörlerle çizilir.
 
 ## Derleme ve çalıştırma
 
 Windows 10 **2004 / build 19041** veya üzeri, .NET 8 Desktop Runtime ve .NET SDK gerekir. Visual Studio 2022’de .NET desktop development iş yükü de kullanılabilir.
+
+### Projeye özel kurulum ve günlük çalıştırma
+
+Windows x64 üzerinde, proje klasöründe PowerShell açıp ilk kurulum için:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Setup.ps1
+```
+
+Bu betik Microsoft’un resmi `dotnet-install.ps1` betiğiyle .NET 8 SDK’yı (WPF Desktop Runtime dahil) `artifacts/dotnet/` içine kurar. `dotnet restore NI.sln` ile `NI.csproj` içindeki **NAudio 2.2.1**, **System.Management 10.0.0**, **System.Diagnostics.PerformanceCounter 8.0.1** ve bunların dolaylı bağımlılıklarını `artifacts/nuget/` içine indirir; ardından Release derlemesi yapar. İlk kurulum için Microsoft indirme sunucularına ve NuGet’e internet erişimi gerekir. Yönetici yetkisi gerekmez. Betikler gerekli ortam değişkenlerini çalıştıkları işlemde ayarlar; kalıcı sistem PATH ayarını değiştirmez.
+
+Sonraki her açılışta aynı proje klasöründe:
+
+**Kolay yol:** proje klasöründeki `Baslat.cmd` dosyasına çift tıklayın. PowerShell alternatifi:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Start.ps1
+```
+
+Çalıştırma betiği yerel SDK’yı seçer, `dotnet build NI.csproj --configuration Release --no-restore` ile değişen kodu derler ve `dotnet run --project NI.csproj --configuration Release --no-build --no-restore` ile açar. Günlük açılış NuGet ağına başvurmaz; SDK’yı tekrar kurmaz. Bağımlılıklar değişirse kurulum betiğini yeniden çalıştırın. SDK ve NuGet önbelleği Git tarafından yok sayılan `artifacts/` altında tutulur; bu klasör silinirse kurulum gerekir. `ExecutionPolicy Bypass` yalnızca başlatılan PowerShell işlemi için geçerlidir.
+
+Aynı Windows masaüstünde tekrar başlatma mevcut pencereyi gösterir. Tek örnek kilidi Windows masaüstüne özeldir; otomasyon/testin izole masaüstündeki bir süreç kullanıcının görünür masaüstünde açılışı engellemez.
+
+Yerel kurulumdan sonra PowerShell üzerinden testleri çalıştırmak için:
+
+```powershell
+$env:DOTNET_ROOT = "$PWD\artifacts\dotnet"
+$env:DOTNET_ROOT_X64 = $env:DOTNET_ROOT
+$env:PATH = "$env:DOTNET_ROOT;$env:PATH"
+$env:DOTNET_CLI_HOME = "$PWD\artifacts\dotnet-home"
+$env:NUGET_PACKAGES = "$PWD\artifacts\nuget\packages"
+$env:NUGET_HTTP_CACHE_PATH = "$PWD\artifacts\nuget\http-cache"
+dotnet run --project Tests/NI.Core.Tests.csproj
+dotnet run --project Tests/Agent/NI.Agent.Tests.csproj
+dotnet run --project Tests/Windows/NI.LayoutChecks.csproj
+```
+
+**Ollama isteğe bağlıdır:** temel arayüzü çalıştırmak için gerekmez. Yapay zekâ asistanı için ayrıca yerel Ollama sunucusu ve araç çağırmayı (`tools`) destekleyen kurulu bir model gerekir; kurulum betiği bunları indirmez. **Diğer uygulamaların Windows bildirimleri için** aşağıdaki MSIX kurulumu ve kullanıcı izni ayrıca gereklidir.
+
+### Sistemde .NET SDK zaten kuruluysa
 
 ```powershell
 dotnet build NI.sln -c Release
@@ -91,7 +135,7 @@ Windows 10, eski Windows 11 sürümleri, yüksek karşıtlık veya başarısız 
 
 Ayar dosyası: `%LOCALAPPDATA%\NotificationIsland\settings.json`. Eski alanlar korunur, eksik `Appearance` varsayılanlarla tamamlanır; boyut ve opaklık sınırlandırılır. Yazma önce geçici dosyaya, sonra atomik replace ile yapılır. Bildirim geçmişi ve okunma durumu uygulama kapanınca silinir.
 
-Ollama, expanded üst satırındaki asistan ikonundan açılır. Sunucu adresi ve model ayarlardan değiştirilebilir; sohbet artık seçilen modeli kullanır. Ollama otomatik başlatılmaz; yerel sunucuyu ve modeli önceden hazırlayın. Önceki AI prototiplerinin kaynakları korunmuş, `NI.csproj` üzerinden üretim derlemesinden çıkarılmıştır. Yeni runtime bu anahtar kelime/overwrite/process-kill yollarını kullanmaz; yalnızca kayıtlı ve yetkilendirilmiş araçlar yürütülür.
+Robot düğmesi compact görev girişini açar. Sunucu adresi ve model ayarların Asistan sekmesinden değiştirilebilir; görevler seçilen modeli kullanır. Ollama otomatik başlatılmaz; yerel sunucuyu ve `tools` destekli modeli önceden hazırlayın. Alarmlar sekmesindeki doğrudan alarm girişi Ollama gerektirmez. Önceki AI prototiplerinin kaynakları korunmuş, `NI.csproj` üzerinden üretim derlemesinden çıkarılmıştır. Yeni runtime yalnızca kayıtlı ve yetkilendirilmiş araçları yürütür.
 
 Hava durumu varsayılan kapalıdır. Etkinleştirip enlem/boylam girildiğinde sıcaklık Open-Meteo’dan 30 dakikada bir alınır. Koordinatlar yalnızca bu istek için gönderilir; otomatik konum sorgusu yapılmaz. Bağlantı yoksa sıcaklık uydurulmaz. [Open-Meteo API ve kullanım koşulları](https://open-meteo.com/en/docs) (ücretsiz uç noktanın ticari kullanım uygunluğu dağıtımdan önce değerlendirilmelidir).
 
@@ -110,6 +154,6 @@ Windows üzerinde gerçek WPF resource/binding ve görünüm sınırı kontrolü
 dotnet run --project Tests/Windows/NI.LayoutChecks.csproj
 ```
 
-İkinci komut test fixture’larıyla dokuz WPF görünümünü yükler, PNG ve binding günlüğünü `artifacts/layout-checks/` altına yazar. Native Windows bildirimlerini/donanımını test etmez; üretim uygulamasına örnek veri eklemez.
+Windows kontrolü izole fixture’larla gerçek `MainWindow` açar; compact/expanded, inline görev, kaynak logoları, tüm ayar sekmeleri, dar boyutlar, görev onayı ve N/A/100% metriklerini render eder. PNG ve binding günlüğünü `artifacts/layout-checks/` altına yazar. Native kapsül region’ı, giriş/focus/Enter/Escape, kapanma politikası, bildirim sayfalaması ve animasyon saatlerinin durması da denetlenir. Gerçek Ollama modeli, Windows bildirim izinleri ve fiziksel donanım kontrolleri ayrı canlı doğrulama gerektirir; üretime örnek veri eklenmez.
 
 Bu değişiklikler macOS ortamında çapraz derlenmiştir. Windows runtime, MSIX kurulum/izinleri, native materyal, donanım ve çoklu DPI kabul kontrolleri ayrıca [docs/WINDOWS-VALIDATION.md](docs/WINDOWS-VALIDATION.md) üzerinden yapılmalıdır. Mimari: [ARCHITECTURE.md](ARCHITECTURE.md).

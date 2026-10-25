@@ -10,7 +10,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
-    <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**;Tests/**;Benchmarks/**</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**;Tests/**;Benchmarks/**;artifacts/**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>

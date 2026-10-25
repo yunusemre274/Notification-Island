@@ -21,7 +21,10 @@ Yeni kabuk tek bir pencere, tek bir `IslandVM` ve servis sözleşmeleri üzerind
 | `Services/RadioService.cs`, `BrightnessService.cs` | Windows donanım adaptörleri |
 | `Services/Windowing/` | DWM materyali ve DPI’ya göre native köşeler |
 | `Themes/`, `Styles/`, `Controls/` | Renk/font/yüzey token’ları, tema uygulama, reusable ikon ve metric kontrolü |
-| `Views/Controls/` | Bildirim, bağlantı, sistem, medya, ayar ve asistan görünümleri |
+| `Views/IslandView`, `Views/Controls/` | Compact inline giriş, sayfalanan bildirimler, bağlantı/metrik/medya, sekmeli ayarlar ve küçük görev kartı |
+| `Core/IslandMode`, `ViewModels/IslandVM.Presentation` | Tek sunum modu, görünürlük, kapsül köşeleri ve bildirim sayfalaması |
+| `Controls/GlassSurface`, `ToggleTile`, `MediaSourceIcon`, `MediaWaveform` | Yuvarlak clipping, bağlantı kartı, vektör marka ve görünürlükle duran waveform |
+| `Services/Diagnostics/CrashLog` | Yerel hata günlüğü ve boyuta göre önceki kayıt döndürme |
 | `Tests/` | Platformdan bağımsız mantık ve Windows WPF görünüm kontrolleri |
 | `Packaging/`, `scripts/` | MSIX manifesti, logo varlıkları ve paketleme |
 
@@ -37,7 +40,7 @@ AppearanceSettings ──PropertyChanged─────────────�
                            IslandView / DashboardPanel / bölüm görünümleri
 ```
 
-`IsExpanded`, `IsSettingsOpen` ve `IsAssistantOpen` yalnızca view model’de değiştirilir. Ayar ve asistan aynı anda açık kalamaz; daralma ikisini de kapatır. Panel boyutu, içerik görünürlüğü ve komutlar aynı durumdan türetilir. Önceki global `TopBarStateController` ve görünümdeki paralel mod alanları kaldırılmıştır.
+`Core/IslandMode` tek sunum durumudur: `Compact`, `TaskInput`, `Dashboard`, `Settings`. `IslandVM.Presentation.cs` içindeki `SetMode` geçişi boyut, köşeler, görünürlük ve servis etkinliğini aynı durumdan türetir. Robot düğmesi ayrı panel oluşturmadan `TaskInput` moduna geçer. `IslandView` yalnızca görünüm odağını yönetir; Enter mevcut `AskCommand` üzerinden `ILocalAgentCoordinator` kullanır. Testler bu sözleşmeye izole bir görev fixture’ı bağlayabilir. Onay mevcut plan hash’ine bağlı kalır ve küçük dashboard kartında gösterilir.
 
 Compact önceliği: etkin 9 saniyelik yeni bildirim preview’i → mevcut medya oturumu → idle. Kullanıcının kapattığı özetler atlanır; saat ve hava ayrı alanlardır. Başlangıç snapshot’ı listelenir fakat preview oluşturmaz. Gelen bildirim kullanıcının açık ayar/asistan panelini kapatmaz.
 
@@ -58,11 +61,15 @@ Compact önceliği: etkin 9 saniyelik yeni bildirim preview’i → mevcut medya
 
 `Tokens.xaml` başlangıç paletini; `ThemeManager` seçilmiş tint/opacity ve yüksek karşıtlık renklerini; `Controls.xaml` etkileşim, kart ve slider stillerini sağlar. `MetricCard` okunabilir sayı, ince çizgi ve alt açıklamayı tekrar kullanır. Windows ikon fontları aynı outline ailesini kullanır.
 
-`AllowsTransparency` katmanlı pencere yaklaşımı yerine normal WPF HWND ve `WindowChrome` kullanılır. Desteklenen Windows 11 sürümlerinde DWM materyali istenir. Böylece WPF `BlurEffect` ile arayüzün kendisi bulanıklaştırılmaz. Windows desteklemiyorsa `ThemeManager` tint’i tamamen opaklaştırır. Köşeler native region ile kırpılır. Özel region ile DWM gölgesi/materyalinin birlikte görünümü Windows QA gerektirir.
+Normal, borderless WPF HWND korunur. `WindowChrome` kaldırılmıştır: onun kendi region güncellemeleriyle özel `SetWindowRgn` çağrılarının çakışması genişliği eski değere döndürüyor ve ikinci çerçeve oluşturuyordu. Native region’ın tek sahibi `WindowMaterialService` olur. Boyut VM’den uygulanır; konum ve kırpma layout sonuna ertelenip birleştirilir. Windows 11’de native Acrylic/Mica istenir; destek yoksa `ThemeManager` okunabilir opak yüzey seçer. DWM’nin ikinci native border çizimi `DWMWA_COLOR_NONE` ile bastırılır, OS’nin farklı yarıçaplı otomatik köşe maskesi devreden çıkarılır. Tüm client alana frame genişletilir. `GlassSurface` çocuk görsellerini ve WPF hit alanını gerçek yuvarlak geometriyle kırpar; native region aynı yarıçapı fiziksel pencere boyutları/DPI ile kullanır. Compact yarıçap yükseklik/2’dir; expanded panelin köşeleri kişiselleştirilebilir. DWM gölgesinin görünümü Windows compositor’ına bağlıdır.
 
-Pencere içeriğe göre boyutlanır; compact durumda ekranın büyük şeffaf bir alanını kaplayıp tıklamaları yakalayan 750×500 pencere yoktur. İki kolonlu dashboard, 460 DIP varsayılan toplam yükseklik sınırı ve scroll kullanır. Bildirim listesi sanallaştırılır. Konum birincil çalışma alanının üst ortasına göre hesaplanır, offset uygulanır ve ekrana sığdırılır. Tam monitör seçici henüz yoktur.
+Pencere içeriğe göre boyutlanır. Dashboard sabit 312 DIP grid kullanır: solda sayfalanan bildirimler ve koşullu küçük görev kartı; sağda 132 DIP bağlantılar, 76 DIP metrikler ve medya. Listeyi kırpmak veya scrollbar’ı gizlemek yerine bildirim sayfa boyutu görev kartına göre üç/bir olarak değişir; 40 kaydın tamamı erişilebilir kalır. Ayarlar dört sekmeye ayrılır. Açık panel yalnızca ok, Escape veya bildirimi açma ile kapanır; hover çıkışı ve Deactivated kapatma yolu yoktur. Eski `AutoCollapse` ayarı yalnızca JSON uyumluluğu için kalır. Konum birincil çalışma alanının üst ortasına göre hesaplanır. Tam monitör seçici henüz yoktur.
+
+`MediaSourceClassifier` GSMTC `SourceAppUserModelId` ve açık yayıncı metadata’sından Spotify/YouTube sınıfını üretir. Tarayıcı kimliğinden sekme tahmini yapılmaz. `MediaSourceIcon` vektör logo/fallback çizer. `MediaWaveform` dokuz retained visual üzerindeki ScaleY transform saatlerini en fazla 20 FPS ile çalıştırır; pause/gizlenme/unload/reduced-motion saatleri kaldırır. Ses örneklemesi, timer veya `CompositionTarget.Rendering` aboneliği yoktur. Medya zaman çizgisi olayları yalnızca süre/ilerleme özelliklerini günceller; kaynak/başlık/oynatma değişmedikçe compact özet yeniden bildirilmez.
 
 ## Ayarlar ve genişletme noktaları
+
+`DesktopInstance` tek-örnek mutex adını mevcut window station ve Win32 desktop kimliğinden üretir. Aynı oturumdaki izole test masaüstü kullanıcının görünür masaüstünü engellemez. İkinci açılış mevcut HWND’ye kayıtlı aktivasyon mesajı gönderir; `MainWindow` gizlenmiş pencereyi gösterir, küçültmeyi kaldırır ve görünür konuma getirir. Odak Windows foreground kurallarına bağlıdır. Pencere henüz oluşmamışsa en fazla 1,5 saniye beklenir; bulunamazsa tanılanabilir hata kaydedilir.
 
 Yeni `Appearance` alanı eski JSON dosyalarında otomatik varsayılan değer alır; sayısal alanlar setter’da sınırlanır. Kaydetme UI tarafında 400 ms debounce edilir; geçici dosya üzerine yazılıp taşınır. Hata kullanıcıya durum mesajı olarak döner. Bozuk ayar dosyası `.invalid-{timestamp}.json` adıyla yedeklenir; sonra varsayılanlara dönülür. Yedek alınamıyorsa özgün dosyayı korumak için kaydetme reddedilir. Testler ayrı bir ayar dosyası yolu kullanır.
 
